@@ -316,6 +316,7 @@
             </div>
             <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
                 <a id="job-det-whatsapp" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">WhatsApp</a>
+                <button id="job-det-failed" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Falhou</button>
                 <button id="job-det-ready" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">Está pronto · enviar e-mail</button>
                 <button onclick="closeModal('modal-job-details')" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Fechar</button>
             </div>
@@ -876,6 +877,8 @@
             info.classList.toggle('hidden', !p.emailSentAt);
             info.innerText = p.emailSentAt ? `✉ E-mail de "pronto" enviado em ${p.emailSentAt} para ${p.email}` : '';
 
+            $('job-det-failed').onclick = () => { closeModal('modal-job-details'); openFailed(p); };
+
             const btn = $('job-det-ready');
             btn.disabled = false;
             btn.innerText = p.emailSentAt ? 'Reenviar e-mail de pronto' : 'Está pronto · enviar e-mail';
@@ -1103,6 +1106,17 @@
             closeModal('modal-add-spool'); renderAll();
         }
 
+        // Abre a janela "Registrar impressão com falha" para o pedido
+        function openFailed(proj) {
+            document.getElementById('failed-project-id').value = proj.id;
+            populateFilamentDropdown('failed-filament');
+            if (proj.filamentGroup) document.getElementById('failed-filament').value = proj.filamentGroup;
+            document.getElementById('failed-printer').value = proj.printer || 'Hi Combo';
+            document.getElementById('failed-duration').value = proj.duration || 1;
+            document.getElementById('failed-usage').value = proj.filamentUsage || 20;
+            openModal('modal-failed');
+        }
+
         async function handleDrop(e, targetStatus, colEl) {
             e.preventDefault(); colEl.classList.remove('drag-over');
             if (!state.draggedId) return;
@@ -1120,12 +1134,7 @@
             }
 
             if (targetStatus === 'failed' && proj.status !== 'failed') {
-                document.getElementById('failed-project-id').value = proj.id;
-                populateFilamentDropdown('failed-filament');
-                document.getElementById('failed-printer').value = proj.printer || 'Hi Combo';
-                document.getElementById('failed-duration').value = proj.duration || 1;
-                document.getElementById('failed-usage').value = proj.filamentUsage || 20;
-                openModal('modal-failed');
+                openFailed(proj);
                 return;
             }
 
