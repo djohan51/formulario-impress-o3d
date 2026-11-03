@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin | Slim3D Print Farm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: {} } }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="text/javascript">
+       (function(){ emailjs.init({ publicKey: "TOPXKRHO2PikidTEd" }); })();
+    </script>
+    <style>
+        .view-section { display: none; }
+        .view-section.active { display: flex; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .drag-over { background-color: #e5e7eb !important; border: 2px dashed #9ca3af !important; }
+        .dark .drag-over { background-color: #374151 !important; border-color: #6b7280 !important; }
+
+        .dragging { opacity: 0.5; transform: scale(0.95); cursor: grabbing !important; }
+        .kanban-card { cursor: grab; }
+        .kanban-card:active { cursor: grabbing; }
+
+        .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+        .dark .custom-scroll::-webkit-scrollbar-thumb { background: #4b5563; border: 2px solid transparent; background-clip: padding-box; }
+
+        .modal { display: none; }
+        .modal.active { display: flex; animation: fadeIn 0.2s ease-in-out; }
+    </style>
+    <script>
+        if (localStorage.getItem('slim3d_theme') === 'dark' || (!localStorage.getItem('slim3d_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex h-screen overflow-hidden transition-colors duration-200">
+
+    <!-- Barra lateral -->
+    <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col z-20 relative shadow-sm transition-colors duration-200">
+        <div class="p-6 border-b dark:border-gray-700">
+            <h2 class="text-xl font-bold dark:text-white">Slim3D Admin</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Fluxo de impressão e estoque</p>
+        </div>
+        <nav class="flex-1 p-4 space-y-2 text-sm font-medium" id="sidebar-nav">
+            <button data-target="view-kanban" class="nav-btn w-full text-left rounded p-2 transition">Quadro de pedidos</button>
+            <button data-target="view-calendar" class="nav-btn w-full text-left rounded p-2 transition">Agenda semanal</button>
+            <button data-target="view-stock" class="nav-btn w-full text-left rounded p-2 transition">Estoque de material</button>
+            <button data-target="view-analytics" class="nav-btn w-full text-left rounded p-2 transition">Analíticos</button>
+        </nav>
+        <div class="p-4 border-t dark:border-gray-700 text-center space-y-2">
+            <button onclick="toggleDarkMode()" class="text-xs bg-gray-800 dark:bg-gray-600 hover:bg-gray-700 dark:hover:bg-gray-500 text-white px-3 py-2 rounded w-full font-medium transition shadow-sm flex items-center justify-center gap-2">
+                <span id="theme-icon">🌙</span> <span id="theme-text">Modo escuro</span>
+            </button>
+            <button onclick="fetchData()" class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-2 rounded w-full font-medium transition shadow-sm">Buscar respostas do formulário ↻</button>
+            <button onclick="saveStateToFile()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded w-full font-medium transition shadow-sm">💾 Salvar backup</button>
+            <button onclick="triggerLoadState()" class="text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-2 rounded w-full font-medium transition shadow-sm">📂 Carregar backup</button>
+            <input type="file" id="load-state-input" accept=".json" class="hidden" onchange="loadStateFromFile(event)">
+        </div>
+    </aside>
+
+    <!-- Conteúdo -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 relative z-10 transition-colors duration-200">
+
+        <!-- Status das impressoras -->
+        <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 shadow-sm z-0 transition-colors duration-200">
+            <div id="printer-status-header" class="flex gap-4 overflow-x-auto w-full custom-scroll pb-1"></div>
+        </header>
+
+        <!-- 1. QUADRO KANBAN -->
+        <div id="view-kanban" class="view-section active flex-1 flex-col overflow-hidden min-h-0">
+            <div class="p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center px-6 transition-colors duration-200">
+                <input type="text" id="kanban-search" oninput="renderKanban()" placeholder="🔍 Buscar projeto, equipe, e-mail..." class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-xs w-72 bg-gray-50 dark:bg-gray-700 dark:text-white focus:bg-white dark:focus:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400">
+                <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Arraste os cards para mudar o status ou agendar · clique para ver detalhes</p>
+            </div>
+
+            <div class="flex-1 overflow-x-auto p-6 gap-6 flex">
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-gray-700 dark:text-gray-300 flex justify-between items-center text-sm">
+                        <span>1. Recebidos <span id="count-inbox" class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 rounded-full text-xs py-0.5 ml-1">0</span></span>
+                        <button onclick="openModal('modal-add-job')" class="text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-white px-2 py-1 rounded shadow-sm">+ Adicionar</button>
+                    </h3>
+                    <div class="drop-zone flex-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-lg border border-gray-200 dark:border-gray-700 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="inbox" id="col-inbox"></div>
+                </div>
+
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-gray-700 dark:text-gray-300 flex justify-between items-center text-sm">2. Agendados / Imprimindo <span id="count-scheduled" class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 rounded-full text-xs py-0.5">0</span></h3>
+                    <div class="drop-zone flex-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-lg border border-gray-200 dark:border-gray-700 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="scheduled" id="col-scheduled"></div>
+                </div>
+
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-green-700 dark:text-green-400 flex justify-between items-center text-sm">3. Prontos <span id="count-done" class="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 px-2 rounded-full text-xs py-0.5">0</span></h3>
+                    <div class="drop-zone flex-1 bg-green-50/50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="done" id="col-done"></div>
+                </div>
+
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-red-700 dark:text-red-400 flex justify-between items-center text-sm">4. Falharam <span id="count-failed" class="bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300 px-2 rounded-full text-xs py-0.5">0</span></h3>
+                    <div class="drop-zone flex-1 bg-red-50/80 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="failed" id="col-failed"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. AGENDA SEMANAL -->
+        <div id="view-calendar" class="view-section flex-1 flex-col overflow-hidden bg-white dark:bg-gray-800 transition-colors duration-200 min-h-0">
+            <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-lg font-bold dark:text-white">Agenda das máquinas</h2>
+                    <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 border border-gray-200 dark:border-gray-600">
+                        <button onclick="changeWeek(-1)" class="px-2 py-1 bg-white dark:bg-gray-600 dark:text-white rounded shadow-sm text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-500">&lt;</button>
+                        <button onclick="resetWeek()" class="px-2 py-1 bg-white dark:bg-gray-600 dark:text-white rounded shadow-sm text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-500 text-gray-700">Hoje</button>
+                        <span id="week-label" class="text-sm font-medium px-2 text-gray-700 dark:text-gray-200 w-48 text-center">...</span>
+                        <button onclick="changeWeek(1)" class="px-2 py-1 bg-white dark:bg-gray-600 dark:text-white rounded shadow-sm text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-500">&gt;</button>
+                    </div>
+                </div>
+                <div class="flex gap-2 flex-wrap justify-end">
+                    <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs rounded font-medium">Hi Combo</span>
+                    <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded font-medium">K2 Combo</span>
+                    <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs rounded font-medium">K2 Plus</span>
+                    <span class="px-2 py-1 bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-xs rounded font-medium">Ender 5 Max</span>
+                    <span class="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 text-xs rounded font-medium">Sparkx I7</span>
+                    <span class="px-2 py-1 bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 text-xs rounded font-medium">Halot X1</span>
+                    <span class="px-2 py-1 bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 text-xs rounded font-medium">Saturn 2</span>
+                    <span class="px-2 py-1 bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 text-xs rounded font-medium">Photon Mono</span>
+                </div>
+            </div>
+            <div id="calendar-header" class="flex border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 text-center"></div>
+            <div class="flex-1 overflow-y-auto custom-scroll relative" id="calendar-grid"></div>
+        </div>
+
+        <!-- 3. ESTOQUE -->
+        <div id="view-stock" class="view-section flex-1 flex-col p-6 overflow-y-auto min-h-0">
+            <div class="flex justify-between items-end mb-6">
+                <h2 class="text-2xl font-bold dark:text-white">Estoque de material</h2>
+                <button onclick="openModal('modal-add-spool')" class="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-4 py-2 rounded text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200">+ Cadastrar material</button>
+            </div>
+            <h3 class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">🏠 Slim3D / Creality (estoque da casa)</h3>
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-x-auto mb-8">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider text-left">
+                        <tr><th class="px-4 py-3">Material e marca</th><th class="px-4 py-3">Cor</th><th class="px-4 py-3">Unidades/rolos</th><th class="px-4 py-3">Restante (g/ml)</th><th class="px-4 py-3 text-right">Ação</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 dark:text-gray-200" id="stock-house-body"></tbody>
+                </table>
+            </div>
+            <h3 class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">👥 Material das equipes</h3>
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider text-left">
+                        <tr><th class="px-4 py-3">Material e marca</th><th class="px-4 py-3">Equipe</th><th class="px-4 py-3">Cor</th><th class="px-4 py-3">Unidades/rolos</th><th class="px-4 py-3">Restante (g/ml)</th><th class="px-4 py-3 text-right">Ação</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 dark:text-gray-200" id="stock-team-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 4. ANALÍTICOS -->
+        <div id="view-analytics" class="view-section flex-1 flex-col p-6 overflow-y-auto bg-gray-50 dark:bg-gray-900 min-h-0">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold dark:text-white">Analíticos da farm</h2>
+                <button onclick="openModal('modal-export')" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Exportar registros (CSV)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-6 mb-8">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Horas de máquina</p><p class="text-3xl font-bold mt-2 dark:text-white" id="stat-hours">0 h</p></div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Total de impressões</p><p class="text-3xl font-bold mt-2 dark:text-white" id="stat-projects">0</p></div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Unidades de material</p><p class="text-3xl font-bold mt-2 dark:text-white" id="stat-spools">0</p></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full max-w-7xl">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Horas de impressão por equipe</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-hours-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Horas por impressora</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-hours-printer"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Material total usado por equipe (g/ml)</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-material-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Material da casa usado por equipe (g/ml)</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-house-material-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Impressões por equipe (%)</h3>
+                    <div class="relative h-48 w-full flex justify-center"><canvas id="chart-prints-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Categorias de uso (%)</h3>
+                    <div class="relative h-48 w-full flex justify-center"><canvas id="chart-uses-category"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Materiais da casa mais usados</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-house-mat"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Materiais das equipes mais usados</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-team-mat"></canvas></div>
+                </div>
+            </div>
+            <div class="h-12 w-full"></div>
+        </div>
+    </main>
+
+    <!-- JANELAS -->
+
+    <!-- Exportar CSV -->
+    <div id="modal-export" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[400px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Exportar registros (CSV)</div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Baixe uma planilha com todas as impressões agendadas, prontas e que falharam.</p>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Filtrar por impressora</label>
+                    <select id="export-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 dark:text-white">
+                        <option value="ALL">Todas as impressoras</option>
+                        <optgroup label="FDM (filamento)">
+                            <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                            <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                            <option value="Sparkx I7">Sparkx I7</option>
+                        </optgroup>
+                        <optgroup label="SLA/DLP (resina)">
+                            <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                            <option value="Photon Mono">Photon Mono</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-export')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="downloadCSV()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Baixar CSV</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adicionar pedido manual -->
+    <div id="modal-add-job" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[400px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Adicionar pedido manual</div>
+            <div class="p-6 space-y-4">
+                <div><label class="block text-sm font-medium dark:text-gray-300">Nome do projeto</label><input type="text" id="add-job-name" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Equipe ou pessoa</label><input type="text" id="add-job-team" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" value="Admin"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">E-mail (para o aviso de pronto)</label><input type="email" id="add-job-email" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" placeholder="aluno@universidade.edu.br"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Telefone / WhatsApp</label><input type="tel" id="add-job-phone" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" placeholder="(47) 99999-9999"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Descrição</label><textarea id="add-job-desc" rows="3" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></textarea></div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-add-job')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveNewJob()" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Adicionar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detalhes do pedido -->
+    <div id="modal-job-details" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[480px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center gap-3"><h3 class="font-bold text-lg dark:text-white" id="job-det-name">Projeto</h3><span id="job-det-status" class="px-2 py-1 rounded text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Status</span></div>
+            <div class="p-6 space-y-4 text-sm dark:text-gray-300 overflow-y-auto custom-scroll">
+                <div class="grid grid-cols-1 gap-1">
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400">Equipe:</span> <span id="job-det-team"></span></div>
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400">E-mail:</span> <span id="job-det-email" class="break-all"></span></div>
+                    <div id="job-det-phone-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Telefone:</span> <span id="job-det-phone"></span></div>
+                    <div id="job-det-material-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Material:</span> <span id="job-det-material"></span></div>
+                    <div id="job-det-own-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Filamento próprio:</span> <span id="job-det-own"></span></div>
+                </div>
+
+                <div>
+                    <span class="font-semibold text-gray-700 dark:text-gray-400">Arquivos 3D:</span>
+                    <div id="job-det-files" class="mt-2 space-y-2"></div>
+                </div>
+
+                <div>
+                    <span class="font-semibold text-gray-700 dark:text-gray-400">Descrição:</span>
+                    <p id="job-det-desc" class="mt-2 text-gray-600 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded border border-yellow-200 dark:border-yellow-700/50 italic whitespace-pre-line max-h-32 overflow-y-auto"></p>
+                </div>
+                <div id="job-det-sched-info" class="hidden border-t dark:border-gray-700 pt-4 mt-4 grid grid-cols-2 gap-y-3 gap-x-4">
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Impressora</span> <span id="job-det-printer" class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-medium"></span></div>
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Horário agendado</span> <span id="job-det-time"></span></div>
+                    <div class="col-span-2"><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Material usado</span> <span id="job-det-fil" class="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium border dark:border-blue-800"></span></div>
+                </div>
+                <p id="job-det-mailinfo" class="text-xs text-green-700 dark:text-green-400 hidden"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
+                <a id="job-det-whatsapp" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">WhatsApp</a>
+                <button id="job-det-ready" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">Está pronto · enviar e-mail</button>
+                <button onclick="closeModal('modal-job-details')" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agendar e material -->
+    <div id="modal-schedule" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[450px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Agendar impressão e material</div>
+            <div class="p-6 space-y-4">
+                <input type="hidden" id="sched-project-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Impressora</label>
+                        <select id="sched-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <optgroup label="FDM (filamento)">
+                                <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                                <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                                <option value="Sparkx I7">Sparkx I7</option>
+                            </optgroup>
+                            <optgroup label="SLA/DLP (resina)">
+                                <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                                <option value="Photon Mono">Photon Mono</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label><input type="date" id="sched-date" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Início</label><input type="time" id="sched-time" value="08:00" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Duração estimada (horas)</label><input type="number" id="sched-duration" step="0.5" value="2.5" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                </div>
+                <div class="pt-4 mt-2 border-t border-gray-200 dark:border-gray-700">
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material</label><select id="sched-filament" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm"></select></div>
+                        <div class="col-span-1"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Uso (g/ml)</label><input type="number" id="sched-usage" value="50" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">* O material é descontado do estoque quando o pedido vai para "Prontos"</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="cancelSchedule()" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveSchedule()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registrar falha -->
+    <div id="modal-failed" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[450px] overflow-hidden border-t-4 border-red-500 dark:border-gray-700 dark:border-t-red-600">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg text-red-700 dark:text-red-400">Registrar impressão com falha</div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Isso desconta do estoque o material perdido e registra o tempo de máquina gasto.</p>
+                <input type="hidden" id="failed-project-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Impressora usada</label>
+                        <select id="failed-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <optgroup label="FDM (filamento)">
+                                <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                                <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                                <option value="Sparkx I7">Sparkx I7</option>
+                            </optgroup>
+                            <optgroup label="SLA/DLP (resina)">
+                                <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                                <option value="Photon Mono">Photon Mono</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material perdido</label><select id="failed-filament" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm"></select></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tempo perdido (horas)</label><input type="number" id="failed-duration" step="0.5" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantidade perdida (g/ml)</label><input type="number" id="failed-usage" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-failed')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveFailed()" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Registrar falha</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cadastrar material -->
+    <div id="modal-add-spool" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[400px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Cadastrar material</div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium dark:text-gray-300">Tipo de material</label>
+                        <select id="spool-type" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <optgroup label="FDM padrão">
+                                <option value="PLA">PLA</option><option value="PETG">PETG</option><option value="TPU">TPU</option>
+                                <option value="ABS">ABS</option><option value="ASA">ASA</option>
+                            </optgroup>
+                            <optgroup label="FDM de engenharia">
+                                <option value="PETG-CF">PETG-CF (fibra de carbono)</option><option value="PA">PA (nylon)</option>
+                                <option value="PPA">PPA</option><option value="PPS">PPS</option>
+                            </optgroup>
+                            <optgroup label="Resina">
+                                <option value="Resina (padrão)">Resina (padrão)</option><option value="Resina (tough)">Resina (tough)</option>
+                                <option value="Resina (lavável em água)">Resina (lavável em água)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium dark:text-gray-300">Marca</label><input type="text" id="spool-brand" placeholder="ex.: Creality" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div>
+                        <label class="block text-sm font-medium dark:text-gray-300">Cor</label>
+                        <select id="spool-color" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <option value="Preto|bg-black">Preto</option><option value="Branco|bg-white">Branco</option><option value="Cinza|bg-gray-500">Cinza</option>
+                            <option value="Transparente|bg-gray-200">Transparente</option>
+                            <option value="Vermelho|bg-red-500">Vermelho</option><option value="Azul|bg-blue-500">Azul</option><option value="Verde|bg-green-500">Verde</option>
+                            <option value="Amarelo|bg-yellow-400">Amarelo</option><option value="Laranja|bg-orange-500">Laranja</option><option value="Roxo|bg-purple-500">Roxo</option>
+                        </select>
+                    </div>
+                </div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Dono (deixe vazio para o estoque da casa)</label><input type="text" id="spool-owner" placeholder="Casa (Slim3D) ou nome da equipe" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Peso / volume (g ou ml)</label><input type="number" id="spool-weight" value="1000" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-add-spool')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveSpool()" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Cadastrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registrar uso manual -->
+    <div id="modal-log-usage" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[300px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Registrar uso manual</div>
+            <div class="p-6"><input type="hidden" id="usage-group-key"><label class="block text-sm font-medium mb-1 dark:text-gray-300">Quantidade usada</label><input type="number" id="usage-grams" placeholder="50" class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-log-usage')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveUsage()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Descontar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        // ===== Configuração =====
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRMvYs56qHmrEKN8qg0CYsuuKNzPeSXcKdg1UKNo0fE3AkDGOAdPOtY90tp1kvInFd/exec';
+        const EMAILJS_SERVICE = 'service_4a46iff';
+        const EMAILJS_TEMPLATE = 'template_k2fujhm';
+        const PRINTERS = ['Hi Combo', 'K2 Combo', 'K2 Plus', 'Ender 5 Max', 'Sparkx I7', 'Halot X1', 'Saturn 2', 'Photon Mono'];
+        const STATUS_PT = { inbox: 'Recebido', scheduled: 'Agendado', done: 'Pronto', failed: 'Falhou' };
+        const CAT_PT = { Internal: 'Interno', Teams: 'Equipes', 'Affiliated Fablab': 'Fab Lab afiliado', Partners: 'Parceiros' };
+
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const ownerLabel = o => o === 'House' ? 'Casa (Slim3D)' : o;
+        const fmtBR = iso => iso ? iso.split('-').reverse().join('/') : '';
+        const nowBR = () => new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+        const formatYMD = (d) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        let weekOffset = 0;
+
+        const getStartOfWeek = (offset) => {
+            const now = new Date();
+            const day = now.getDay();
+            const diffToMonday = (day === 0 ? -6 : 1) - day;
+            const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday + (offset * 7));
+            monday.setHours(0, 0, 0, 0);
+            return monday;
+        };
+
+        const getFilamentGroupKey = (f) => `${f.brand}|${f.color}|${f.owner}|${f.colorCss}`;
+
+        const state = {
+            projects: [],
+            filaments: [
+                { id: 'f1', brand: 'Creality PLA', color: 'Vermelho', colorCss: 'bg-red-500', owner: 'House', weight: 850, max: 1000 },
+                { id: 'f2', brand: 'Creality PETG-CF', color: 'Preto', colorCss: 'bg-black', owner: 'House', weight: 1000, max: 1000 },
+                { id: 'f3', brand: 'Overture TPU', color: 'Preto', colorCss: 'bg-black', owner: 'Robotics Team', weight: 600, max: 1000 },
+                { id: 'f4', brand: 'Anycubic Resina (padrão)', color: 'Cinza', colorCss: 'bg-gray-500', owner: 'House', weight: 1000, max: 1000 }
+            ],
+            draggedId: null
+        };
+
+        const charts = {};
+
+        // ===== Arquivos (Google Drive) =====
+        function driveId(url) {
+            const s = String(url || '');
+            const m = s.match(/[?&]id=([\w-]{20,})/) || s.match(/\/d\/([\w-]{20,})/);
+            return m ? m[1] : null;
+        }
+        // Aceita fp.files (lista de links ou {name,url}) ou fp.fileUrl (um link ou vários separados por vírgula)
+        function normalizeFiles(fp) {
+            let raw = [];
+            if (Array.isArray(fp.files)) raw = fp.files;
+            else if (fp.fileUrl && fp.fileUrl !== '#') raw = String(fp.fileUrl).split(/[,\s]+/).filter(Boolean);
+            return raw.map((f, i) => {
+                const url = typeof f === 'string' ? f : (f.url || '');
+                const name = (typeof f === 'object' && f.name) ? f.name : `Arquivo ${i + 1}`;
+                const id = driveId(url);
+                return {
+                    name,
+                    view: id ? `https://drive.google.com/file/d/${id}/view` : url,
+                    download: id ? `https://drive.google.com/uc?export=download&id=${id}` : url
+                };
+            }).filter(f => f.view);
+        }
+        function whatsappLink(phone) {
+            let d = String(phone || '').replace(/\D/g, '');
+            if (!d) return '';
+            if (d.length <= 11) d = '55' + d;
+            return d.length >= 12 ? `https://wa.me/${d}` : '';
+        }
+
+        // ===== Modo escuro =====
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('slim3d_theme', isDark ? 'dark' : 'light');
+            updateThemeIcon();
+            renderAnalytics();
+            renderCalendar();
+        }
+
+        function updateThemeIcon() {
+            const isDark = document.documentElement.classList.contains('dark');
+            document.getElementById('theme-icon').innerText = isDark ? '☀️' : '🌙';
+            document.getElementById('theme-text').innerText = isDark ? 'Modo claro' : 'Modo escuro';
+        }
+
+        // ===== Salvar / carregar =====
+        function saveLocalState() {
+            localStorage.setItem('slim3d_state', JSON.stringify(state));
+        }
+
+        function loadLocalState() {
+            const s = localStorage.getItem('slim3d_state');
+            if (s) {
+                const parsed = JSON.parse(s);
+                state.projects = parsed.projects || [];
+                state.filaments = parsed.filaments || [];
+            }
+        }
+
+        function saveStateToFile() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const a = document.createElement('a');
+            a.setAttribute("href", dataStr);
+            a.setAttribute("download", `slim3d_backup_${formatYMD(new Date())}.json`);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        function triggerLoadState() {
+            document.getElementById('load-state-input').click();
+        }
+
+        function loadStateFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const loaded = JSON.parse(e.target.result);
+                    if (loaded.projects && loaded.filaments) {
+                        state.projects = loaded.projects;
+                        state.filaments = loaded.filaments;
+                        renderAll();
+                        alert("Backup carregado com sucesso!");
+                    } else {
+                        alert("Arquivo de backup inválido.");
+                    }
+                } catch (err) {
+                    alert("Erro ao ler o arquivo.");
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        async function init() {
+            updateThemeIcon();
+            setupNavigation();
+            loadLocalState();
+            await fetchData();
+            setInterval(() => {
+                updatePrinterStatus();
+                renderCalendar();
+            }, 60000);
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const formProjects = await response.json();
+
+                const manual = state.projects.filter(p => p.manual);
+                const fromForm = formProjects.map(fp => {
+                    let parsedEmail = (fp.email || '').trim();
+                    if (!parsedEmail && fp.description) {
+                        const m = fp.description.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
+                        if (m) parsedEmail = m[1];
+                    }
+                    const extras = {
+                        email: parsedEmail,
+                        files: normalizeFiles(fp),
+                        phone: fp.phone || fp.telefone || fp.whatsapp || '',
+                        material: fp.material || '',
+                        ownFilament: fp.ownFilament || fp.filamentoProprio || ''
+                    };
+
+                    const existing = state.projects.find(p => p.id === fp.id);
+                    if (existing) {
+                        return {
+                            ...fp, ...extras,
+                            status: existing.status,
+                            printer: existing.printer,
+                            date: existing.date,
+                            time: existing.time,
+                            duration: existing.duration,
+                            filamentGroup: existing.filamentGroup,
+                            filamentUsage: existing.filamentUsage,
+                            deducted: existing.deducted,
+                            emailSentAt: existing.emailSentAt || null,
+                            failedLogs: existing.failedLogs || []
+                        };
+                    }
+                    return { ...fp, ...extras, status: fp.status || 'inbox', failedLogs: [] };
+                });
+                state.projects = [...fromForm, ...manual.filter(m => !fromForm.some(f => f.id === m.id))];
+                renderAll();
+            } catch (err) {
+                console.error("Erro ao buscar respostas do formulário: ", err);
+                renderAll();
+            }
+        }
+
+        function setupNavigation() {
+            const navButtons = document.querySelectorAll('.nav-btn');
+            const views = document.querySelectorAll('.view-section');
+            navButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    navButtons.forEach(b => {
+                        b.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-white');
+                        b.classList.add('text-gray-600', 'dark:text-gray-400');
+                    });
+                    btn.classList.remove('text-gray-600', 'dark:text-gray-400');
+                    btn.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-white');
+                    views.forEach(v => v.classList.remove('active'));
+                    document.getElementById(btn.getAttribute('data-target')).classList.add('active');
+                });
+            });
+            const first = document.querySelector('.nav-btn');
+            if (first) first.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-white');
+        }
+
+        function saveNewJob() {
+            const name = document.getElementById('add-job-name').value;
+            const team = document.getElementById('add-job-team').value || 'Admin';
+            const email = document.getElementById('add-job-email').value || '';
+            const phone = document.getElementById('add-job-phone').value || '';
+            const desc = document.getElementById('add-job-desc').value || '';
+
+            if (!name) return alert("O nome do projeto é obrigatório.");
+
+            state.projects.push({
+                id: 'p' + Date.now(),
+                manual: true,
+                name, team, email, phone,
+                status: 'inbox',
+                printer: null, date: null, time: null, duration: null,
+                description: desc,
+                files: [],
+                failedLogs: []
+            });
+
+            ['add-job-name', 'add-job-email', 'add-job-phone', 'add-job-desc'].forEach(id => document.getElementById(id).value = '');
+            closeModal('modal-add-job');
+            renderAll();
+        }
+
+        function updatePrinterStatus() {
+            const now = new Date();
+            const headerContainer = document.getElementById('printer-status-header');
+            let html = '';
+
+            PRINTERS.forEach(printerName => {
+                const pProjects = state.projects.filter(p => (p.status === 'scheduled' || p.status === 'done') && p.printer === printerName);
+                let currentStatus = 'Livre'; let percent = 0;
+                let statusClass = 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400'; let dotClass = 'bg-gray-400 dark:bg-gray-500';
+
+                const totalHoursOnMachine = state.projects.reduce((acc, proj) => {
+                    let total = acc;
+                    if (proj.printer === printerName && proj.duration) total += proj.duration;
+                    if (proj.failedLogs) proj.failedLogs.forEach(log => { if (log.printer === printerName) total += log.duration; });
+                    return total;
+                }, 0);
+
+                pProjects.sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
+
+                for (let p of pProjects) {
+                    if (!p.date || !p.time || !p.duration) continue;
+                    const start = new Date(`${p.date}T${p.time}`);
+                    const end = new Date(start.getTime() + p.duration * 3600000);
+                    const doneBuffer = new Date(end.getTime() + 15 * 60000);
+
+                    if (now >= start && now < end) {
+                        currentStatus = 'Imprimindo'; percent = Math.floor(((now - start) / (end - start)) * 100);
+                        statusClass = 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300'; dotClass = 'bg-green-500 animate-pulse';
+                        break;
+                    } else if (now >= end && now < doneBuffer) {
+                        currentStatus = 'Concluída';
+                        statusClass = 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300'; dotClass = 'bg-blue-500 animate-pulse';
+                        break;
+                    }
+                }
+
+                let textDisplay = currentStatus;
+                if (currentStatus === 'Imprimindo') textDisplay += ` (${percent}%)`;
+
+                html += `
+                    <div class="flex items-center gap-2 px-3 py-1 ${statusClass} border rounded text-xs whitespace-nowrap transition-colors duration-200">
+                        <span class="w-2 h-2 rounded-full ${dotClass}"></span>
+                        <span class="font-bold">${printerName}</span>: ${textDisplay}
+                        <span class="text-gray-400 dark:text-gray-500 text-[10px] ml-1">(${totalHoursOnMachine}h no total)</span>
+                    </div>`;
+            });
+            headerContainer.innerHTML = html;
+        }
+
+        function renderKanban() {
+            const q = (document.getElementById('kanban-search')?.value || '').toLowerCase();
+            const cols = { inbox: [], scheduled: [], done: [], failed: [] };
+
+            state.projects.forEach(p => {
+                const ok = !q ||
+                    (p.name && p.name.toLowerCase().includes(q)) ||
+                    (p.team && p.team.toLowerCase().includes(q)) ||
+                    (p.email && p.email.toLowerCase().includes(q));
+                if (cols[p.status] && ok) cols[p.status].push(p);
+            });
+
+            const sortDesc = (a, b) => {
+                if (!a.date || !b.date) return 0;
+                return new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`);
+            };
+            cols.done.sort(sortDesc);
+            cols.failed.sort(sortDesc);
+
+            Object.keys(cols).forEach(colId => {
+                document.getElementById(`count-${colId}`).innerText = cols[colId].length;
+                const colEl = document.getElementById(`col-${colId}`);
+                colEl.innerHTML = '';
+
+                cols[colId].forEach(p => {
+                    let extraInfo = '';
+                    if (p.status === 'scheduled' || p.status === 'done' || p.status === 'failed') {
+                        const matDisplay = p.filamentGroup ? p.filamentGroup.split('|')[0] : '—';
+                        const displayUsage = p.status === 'failed' && p.failedLogs && p.failedLogs.length > 0
+                            ? p.failedLogs[p.failedLogs.length - 1].usage : p.filamentUsage;
+                        if (p.date || p.printer) {
+                            extraInfo = `
+                            <div class="mt-2 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-1.5 rounded border border-gray-100 dark:border-gray-600">
+                                <p><strong>Horário:</strong> ${esc(fmtBR(p.date))} • ${esc(p.time || '')}</p>
+                                <p><strong>Impressora:</strong> ${esc(p.printer || '—')}</p>
+                                <p><strong>Material:</strong> ${esc(displayUsage ?? 0)} g/ml (${esc(matDisplay)})</p>
+                            </div>`;
+                        }
+                    }
+                    const files = p.files || [];
+                    const fileBtns = files.length
+                        ? `<a href="${esc(files[0].download)}" target="_blank" rel="noopener" class="text-xs border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 px-1.5 py-0.5 rounded" title="Baixar arquivo" onclick="event.stopPropagation()">⬇${files.length > 1 ? ' ' + files.length : ''}</a>`
+                        : '';
+                    const mailTag = p.emailSentAt ? `<span class="text-[10px] text-green-700 dark:text-green-400 block mt-1">✉ e-mail enviado ${esc(p.emailSentAt)}</span>` : '';
+
+                    const card = document.createElement('div');
+                    card.className = "bg-white dark:bg-gray-700 p-3 rounded border border-gray-200 dark:border-gray-600 mb-2 shadow-sm kanban-card transition-shadow hover:shadow-md";
+                    card.draggable = true; card.id = p.id;
+                    card.innerHTML = `
+                        <span class="text-xs font-semibold bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded mb-2 inline-block">${esc(p.team)}</span>
+                        <div class="flex justify-between items-start gap-2">
+                            <h4 class="font-medium text-sm text-blue-900 dark:text-blue-300">${esc(p.name)}</h4>
+                            <div class="flex gap-1 flex-shrink-0">${fileBtns}</div>
+                        </div>
+                        ${p.material ? `<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${esc(p.material)}</p>` : ''}
+                        ${extraInfo}
+                        ${mailTag}
+                    `;
+                    card.addEventListener('dragstart', () => { state.draggedId = p.id; setTimeout(() => card.classList.add('dragging'), 0); });
+                    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+                    card.addEventListener('click', () => { if (!card.classList.contains('dragging')) openJobDetails(p.id); });
+                    colEl.appendChild(card);
+                });
+
+                if (!colEl.hasAttribute('data-listeners-attached')) {
+                    colEl.addEventListener('dragover', (e) => { e.preventDefault(); colEl.classList.add('drag-over'); });
+                    colEl.addEventListener('dragleave', () => colEl.classList.remove('drag-over'));
+                    colEl.addEventListener('drop', (e) => handleDrop(e, colId, colEl));
+                    colEl.setAttribute('data-listeners-attached', 'true');
+                }
+            });
+        }
+
+        function openJobDetails(id) {
+            const p = state.projects.find(proj => proj.id === id);
+            if (!p) return;
+            const $ = i => document.getElementById(i);
+            $('job-det-name').innerText = p.name;
+            $('job-det-team').innerText = p.team || '—';
+            $('job-det-email').innerText = p.email || 'Nenhum e-mail associado.';
+            $('job-det-desc').innerText = p.description || 'Sem descrição.';
+
+            const rowFill = (row, el, val) => { $(row).classList.toggle('hidden', !val); $(el).innerText = val || ''; };
+            rowFill('job-det-phone-row', 'job-det-phone', p.phone);
+            rowFill('job-det-material-row', 'job-det-material', p.material);
+            rowFill('job-det-own-row', 'job-det-own', p.ownFilament);
+
+            const files = p.files || [];
+            $('job-det-files').innerHTML = files.length
+                ? files.map(f => `
+                    <div class="bg-gray-50 dark:bg-gray-700 p-2.5 rounded border dark:border-gray-600 flex justify-between items-center gap-2">
+                        <span class="font-medium truncate">${esc(f.name)}</span>
+                        <span class="flex gap-1 flex-shrink-0">
+                            <a href="${esc(f.download)}" target="_blank" rel="noopener" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium">⬇ Baixar</a>
+                            <a href="${esc(f.view)}" target="_blank" rel="noopener" class="text-xs bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white px-3 py-1.5 rounded font-medium">Abrir ↗</a>
+                        </span>
+                    </div>`).join('')
+                : '<p class="text-gray-500 dark:text-gray-400">Nenhum arquivo anexado.</p>';
+
+            const statusEl = $('job-det-status');
+            statusEl.innerText = STATUS_PT[p.status] || p.status;
+            let cls = 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
+            if (p.status === 'done') cls = 'bg-green-100 dark:bg-green-900 dark:text-green-200 text-green-800';
+            if (p.status === 'scheduled') cls = 'bg-blue-100 dark:bg-blue-900 dark:text-blue-200 text-blue-800';
+            if (p.status === 'failed') cls = 'bg-red-100 dark:bg-red-900 dark:text-red-200 text-red-800';
+            statusEl.className = 'px-2 py-1 rounded text-xs font-semibold uppercase tracking-wide whitespace-nowrap ' + cls;
+
+            const sched = $('job-det-sched-info');
+            if ((p.status === 'scheduled' || p.status === 'done' || p.status === 'failed') && p.printer) {
+                sched.classList.remove('hidden');
+                $('job-det-printer').innerText = p.printer;
+                $('job-det-time').innerText = `${fmtBR(p.date)} às ${p.time} (${p.duration}h)`;
+                const filName = p.filamentGroup ? p.filamentGroup.split('|')[0] + ' (' + p.filamentGroup.split('|')[1] + ')' : '—';
+                $('job-det-fil').innerText = `${filName} · ${p.filamentUsage || 0} g/ml`;
+            } else {
+                sched.classList.add('hidden');
+            }
+
+            const wa = whatsappLink(p.phone);
+            $('job-det-whatsapp').classList.toggle('hidden', !wa);
+            $('job-det-whatsapp').href = wa || '#';
+
+            const info = $('job-det-mailinfo');
+            info.classList.toggle('hidden', !p.emailSentAt);
+            info.innerText = p.emailSentAt ? `✉ E-mail de "pronto" enviado em ${p.emailSentAt} para ${p.email}` : '';
+
+            const btn = $('job-det-ready');
+            btn.disabled = false;
+            btn.innerText = p.emailSentAt ? 'Reenviar e-mail de pronto' : 'Está pronto · enviar e-mail';
+            btn.onclick = async () => {
+                btn.disabled = true; btn.innerText = 'Enviando…';
+                await markDone(p);
+                openJobDetails(p.id);
+            };
+
+            openModal('modal-job-details');
+        }
+
+        // Marca como pronto: desconta material e envia o e-mail para quem respondeu o formulário
+        async function markDone(proj) {
+            if (proj.emailSentAt && !confirm(`O e-mail de pronto já foi enviado em ${proj.emailSentAt}. Enviar de novo para ${proj.email}?`)) {
+                proj.status = 'done'; renderAll(); return;
+            }
+            if (!proj.emailSentAt && proj.status !== 'done' && !confirm(`Marcar "${proj.name}" como pronto e enviar o e-mail para ${proj.email || '(sem e-mail)'}?`)) {
+                renderAll(); return;
+            }
+
+            proj.status = 'done';
+            let msg = '';
+            if (proj.filamentGroup && proj.filamentUsage && !proj.deducted) {
+                const shortage = deductFilamentFromGroup(proj.filamentGroup, proj.filamentUsage);
+                proj.deducted = true;
+                msg += `Descontado ${proj.filamentUsage} g/ml do estoque. `;
+                if (shortage > 0) msg += `Atenção: faltou registrar ${shortage} g/ml no estoque. `;
+            }
+
+            if (proj.email && proj.email.includes('@')) {
+                try {
+                    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+                        to_name: proj.team || proj.name,
+                        to_email: proj.email,
+                        project_name: proj.name
+                    });
+                    proj.emailSentAt = nowBR();
+                    msg += `E-mail de pronto enviado para ${proj.email}!`;
+                } catch (err) {
+                    console.error("Erro no EmailJS:", err);
+                    msg += "O pedido foi marcado como pronto, mas o e-mail não foi enviado. Tente de novo pelo botão nos detalhes.";
+                }
+            } else {
+                msg += "Pedido marcado como pronto, mas não há e-mail válido nesta resposta.";
+            }
+            renderAll();
+            alert(msg);
+        }
+
+        function changeWeek(delta) { weekOffset += delta; renderCalendar(); }
+        function resetWeek() { weekOffset = 0; renderCalendar(); }
+
+        function renderCalendar() {
+            const startOfWeek = getStartOfWeek(weekOffset);
+            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6);
+            document.getElementById('week-label').innerText = `${startOfWeek.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} – ${endOfWeek.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+            const header = document.getElementById('calendar-header');
+            let headHTML = `<div class="w-16 py-2 border-r dark:border-gray-700">Hora</div>`;
+            const columnDates = [];
+            const DIAS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(startOfWeek.getDate() + i);
+                columnDates.push(formatYMD(colDate));
+                headHTML += `<div class="flex-1 py-2 border-r dark:border-gray-700 flex flex-col"><span class="font-bold">${DIAS[i]}</span><span class="text-xs font-normal">${colDate.getDate()}</span></div>`;
+            }
+            header.innerHTML = headHTML;
+
+            const grid = document.getElementById('calendar-grid');
+            const ROW_HEIGHT = 48;
+            let html = `<div class="flex relative" style="min-height: ${24 * ROW_HEIGHT}px">`;
+
+            html += `<div class="w-16 border-r dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 text-right pr-2">`;
+            for (let i = 0; i < 24; i++) html += `<div style="height: ${ROW_HEIGHT}px" class="pt-1 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''}">${i < 10 ? '0' + i : i}:00</div>`;
+            html += `</div>`;
+
+            const pColors = {
+                'Hi Combo': 'green', 'K2 Combo': 'blue', 'K2 Plus': 'purple', 'Ender 5 Max': 'orange', 'Sparkx I7': 'indigo',
+                'Halot X1': 'pink', 'Saturn 2': 'teal', 'Photon Mono': 'cyan'
+            };
+
+            const todayYMD = formatYMD(new Date());
+            const now = new Date();
+            const isDark = document.documentElement.classList.contains('dark');
+
+            for (let d = 0; d < 7; d++) {
+                const targetDate = columnDates[d];
+                html += `<div class="flex-1 border-r border-gray-100 dark:border-gray-700 relative">`;
+                for (let i = 1; i < 24; i++) html += `<div class="border-t border-gray-100 dark:border-gray-700 w-full absolute" style="height: ${ROW_HEIGHT}px; top:${i * ROW_HEIGHT}px"></div>`;
+
+                if (targetDate === todayYMD) {
+                    const mins = now.getHours() * 60 + now.getMinutes();
+                    const topOffset = (mins / 60) * ROW_HEIGHT;
+                    html += `
+                        <div class="absolute w-full z-30 flex items-center" style="top: ${topOffset}px; left: 0; pointer-events: none;">
+                            <div class="w-full border-t-2 border-red-500"></div>
+                            <div class="w-2 h-2 bg-red-500 rounded-full absolute -left-1"></div>
+                        </div>`;
+                }
+
+                const dayProjs = state.projects.filter(p => (p.status === 'scheduled' || p.status === 'done') && p.date === targetDate && p.time);
+                dayProjs.sort((a, b) => (a.time.split(':')[0] * 60 + a.time.split(':')[1] * 1) - (b.time.split(':')[0] * 60 + b.time.split(':')[1] * 1));
+
+                const tracks = [];
+                dayProjs.forEach(p => {
+                    if (!p.time || !p.duration) return;
+                    const [sh, sm] = p.time.split(':').map(Number);
+                    const startMins = sh * 60 + sm; const endMins = startMins + (p.duration * 60);
+                    p._startMins = startMins; p._endMins = endMins;
+                    let placed = false;
+                    for (let i = 0; i < tracks.length; i++) {
+                        if (tracks[i] <= startMins) { tracks[i] = endMins; p._track = i; placed = true; break; }
+                    }
+                    if (!placed) { p._track = tracks.length; tracks.push(endMins); }
+                });
+
+                const widthPct = 100 / Math.max(1, tracks.length);
+
+                dayProjs.forEach(p => {
+                    if (p._startMins === undefined) return;
+                    const topOffset = (p._startMins / 60) * ROW_HEIGHT; const height = p.duration * ROW_HEIGHT;
+                    const c = pColors[p.printer] || 'gray';
+                    let cardClass = `absolute border rounded p-1 text-xs shadow-sm overflow-hidden z-10 hover:z-20 hover:shadow-md cursor-pointer transition-colors`;
+                    const cardStyle = `top: ${topOffset}px; height: ${height}px; left: ${p._track * widthPct}%; width: calc(${widthPct}% - 2px); margin: 0 1px;`;
+                    cardClass += isDark ? ` bg-gray-700 border-gray-600` : ` bg-${c}-100 border-${c}-300`;
+                    html += `
+                    <div class="${cardClass}" style="${cardStyle}" onclick="openJobDetails('${esc(p.id)}')">
+                        <div class="font-bold ${isDark ? 'text-white' : `text-${c}-900`} truncate">${esc(p.name)}</div>
+                        <div class="${isDark ? 'text-gray-300' : `text-${c}-700`} truncate">${esc(p.printer)}</div>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+            html += `</div>`; grid.innerHTML = html;
+        }
+
+        function getGroupedFilaments() {
+            const groups = {};
+            state.filaments.forEach(f => {
+                const key = getFilamentGroupKey(f);
+                if (!groups[key]) groups[key] = { key, brand: f.brand, color: f.color, colorCss: f.colorCss, owner: f.owner, weight: 0, max: 0, rolls: 0 };
+                groups[key].weight += f.weight; groups[key].max += f.max; groups[key].rolls += 1;
+            });
+            return groups;
+        }
+
+        function deductFilamentFromGroup(groupKey, amount) {
+            let remaining = amount;
+            const spools = state.filaments.filter(f => getFilamentGroupKey(f) === groupKey).sort((a, b) => a.weight - b.weight);
+            for (let spool of spools) {
+                if (remaining <= 0) break;
+                if (spool.weight >= remaining) { spool.weight -= remaining; remaining = 0; }
+                else { remaining -= spool.weight; spool.weight = 0; }
+            }
+            state.filaments = state.filaments.filter(f => f.weight > 0);
+            return remaining;
+        }
+
+        function populateFilamentDropdown(targetId = 'sched-filament') {
+            const sel = document.getElementById(targetId);
+            sel.innerHTML = '';
+            const groups = getGroupedFilaments();
+            for (const key in groups) {
+                const g = groups[key];
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = `${g.brand} (${g.color}) - ${ownerLabel(g.owner)} [${g.weight} restantes]`;
+                sel.appendChild(opt);
+            }
+        }
+
+        function renderStock() {
+            const hBody = document.getElementById('stock-house-body'); const tBody = document.getElementById('stock-team-body');
+            hBody.innerHTML = ''; tBody.innerHTML = '';
+
+            Object.values(getGroupedFilaments()).forEach(g => {
+                const pct = (g.weight / g.max) * 100;
+                const barColor = pct > 40 ? 'bg-green-500' : (pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+                const row = `
+                    <tr>
+                        <td class="px-4 py-3 font-medium dark:text-gray-200">${esc(g.brand)}</td>
+                        ${g.owner !== 'House' ? `<td class="px-4 py-3"><span class="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded text-xs">${esc(g.owner)}</span></td>` : ''}
+                        <td class="px-4 py-3 flex items-center gap-2 dark:text-gray-300"><span class="w-3 h-3 rounded-full ${g.colorCss} border dark:border-gray-600 shadow-sm"></span> ${esc(g.color)}</td>
+                        <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">${g.rolls} <span class="text-xs text-gray-400 dark:text-gray-500 font-normal">unidade(s)</span></td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div class="${barColor} h-2 rounded-full" style="width: ${pct}%"></div></div>
+                                <span class="text-xs ${pct <= 20 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-600 dark:text-gray-400'}">${g.weight}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-right"><button onclick="promptUsage('${esc(g.key)}')" class="text-blue-600 dark:text-blue-400 hover:underline text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">Registrar uso</button></td>
+                    </tr>`;
+                if (g.owner === 'House') hBody.innerHTML += row; else tBody.innerHTML += row;
+            });
+            document.getElementById('stat-spools').innerText = state.filaments.length;
+        }
+
+        function promptUsage(groupKey) {
+            document.getElementById('usage-group-key').value = groupKey; document.getElementById('usage-grams').value = ''; openModal('modal-log-usage');
+        }
+
+        function saveUsage() {
+            const sub = parseInt(document.getElementById('usage-grams').value); if (!sub) return;
+            deductFilamentFromGroup(document.getElementById('usage-group-key').value, sub);
+            closeModal('modal-log-usage'); renderAll();
+        }
+
+        function saveSpool() {
+            const type = document.getElementById('spool-type').value;
+            const brandStr = document.getElementById('spool-brand').value || 'Sem marca';
+            const colorData = document.getElementById('spool-color').value.split('|');
+            let owner = (document.getElementById('spool-owner').value || '').trim();
+            if (!owner || /^(house|casa|slim3d|casa \(slim3d\))$/i.test(owner)) owner = 'House';
+            const w = parseInt(document.getElementById('spool-weight').value);
+
+            state.filaments.push({
+                id: 'f' + Date.now(),
+                brand: brandStr + ' ' + type,
+                color: colorData[0], colorCss: colorData[1],
+                owner, weight: w, max: w
+            });
+            closeModal('modal-add-spool'); renderAll();
+        }
+
+        async function handleDrop(e, targetStatus, colEl) {
+            e.preventDefault(); colEl.classList.remove('drag-over');
+            if (!state.draggedId) return;
+
+            const proj = state.projects.find(p => p.id === state.draggedId);
+            state.draggedId = null;
+            if (!proj) return;
+
+            if (targetStatus === 'scheduled') {
+                document.getElementById('sched-project-id').value = proj.id;
+                document.getElementById('sched-date').value = formatYMD(new Date());
+                populateFilamentDropdown('sched-filament');
+                openModal('modal-schedule');
+                return;
+            }
+
+            if (targetStatus === 'failed' && proj.status !== 'failed') {
+                document.getElementById('failed-project-id').value = proj.id;
+                populateFilamentDropdown('failed-filament');
+                document.getElementById('failed-printer').value = proj.printer || 'Hi Combo';
+                document.getElementById('failed-duration').value = proj.duration || 1;
+                document.getElementById('failed-usage').value = proj.filamentUsage || 20;
+                openModal('modal-failed');
+                return;
+            }
+
+            if (targetStatus === 'done' && proj.status !== 'done') {
+                await markDone(proj);
+                return;
+            }
+
+            if (targetStatus !== 'failed' && targetStatus !== 'scheduled') proj.status = targetStatus;
+            renderAll();
+        }
+
+        function saveSchedule() {
+            const id = document.getElementById('sched-project-id').value;
+            const printer = document.getElementById('sched-printer').value;
+            const dateStr = document.getElementById('sched-date').value;
+            const startTimeStr = document.getElementById('sched-time').value;
+            const duration = parseFloat(document.getElementById('sched-duration').value);
+            const filGroup = document.getElementById('sched-filament').value;
+            const filUsage = parseInt(document.getElementById('sched-usage').value);
+
+            if (!dateStr || !startTimeStr || !duration || !filUsage) return alert("Preencha todos os campos.");
+
+            const [sh, sm] = startTimeStr.split(':').map(Number);
+            const startMins = sh * 60 + sm; const endMins = startMins + (duration * 60);
+            const conflict = state.projects.some(p => {
+                if (p.id === id) return false;
+                if (p.status === 'scheduled' && p.printer === printer && p.date === dateStr && p.time) {
+                    const [psh, psm] = p.time.split(':').map(Number);
+                    const pStart = psh * 60 + psm; const pEnd = pStart + (p.duration * 60);
+                    return (startMins < pEnd && endMins > pStart);
+                }
+                return false;
+            });
+            if (conflict) return alert(`CONFLITO: a ${printer} já está ocupada nesse horário.`);
+
+            const proj = state.projects.find(p => p.id === id);
+            if (proj.status === 'failed') proj.deducted = false;
+
+            proj.printer = printer; proj.date = dateStr; proj.time = startTimeStr;
+            proj.duration = duration; proj.filamentGroup = filGroup; proj.filamentUsage = filUsage;
+            proj.status = 'scheduled';
+
+            closeModal('modal-schedule'); renderAll();
+        }
+        function cancelSchedule() { closeModal('modal-schedule'); state.draggedId = null; }
+
+        function saveFailed() {
+            const id = document.getElementById('failed-project-id').value;
+            const printer = document.getElementById('failed-printer').value;
+            const duration = parseFloat(document.getElementById('failed-duration').value);
+            const filGroup = document.getElementById('failed-filament').value;
+            const filUsage = parseInt(document.getElementById('failed-usage').value);
+
+            if (!duration || !filUsage) return alert("Preencha todos os campos.");
+
+            const proj = state.projects.find(p => p.id === id);
+
+            if (filGroup && filUsage) {
+                const shortage = deductFilamentFromGroup(filGroup, filUsage);
+                if (shortage > 0) alert(`Atenção: faltou registrar ${shortage} g/ml no estoque.`);
+            }
+
+            proj.failedLogs = proj.failedLogs || [];
+            proj.failedLogs.push({ printer, duration, usage: filUsage, group: filGroup });
+
+            proj.printer = printer;
+            proj.duration = duration;
+            proj.filamentGroup = filGroup;
+            proj.filamentUsage = filUsage;
+            proj.status = 'failed';
+            proj.deducted = true;
+
+            closeModal('modal-failed');
+            renderAll();
+        }
+
+        function getUserCategory(teamName) {
+            if (!teamName) return 'Teams';
+            const t = teamName.toLowerCase();
+            if (t.includes('admin') || t.includes('internal') || t.includes('interno') || t.includes('house') || t.includes('slim3d')) return 'Internal';
+            if (t.includes('fablab') || t.includes('fab lab')) return 'Affiliated Fablab';
+            if (t.includes('partner') || t.includes('parceiro') || t.includes('creality')) return 'Partners';
+            return 'Teams';
+        }
+
+        function renderAnalytics() {
+            const isDark = document.documentElement.classList.contains('dark');
+            Chart.defaults.color = isDark ? '#9ca3af' : '#64748b';
+            const gridColor = isDark ? '#374151' : '#e5e7eb';
+
+            let totalMachineHours = 0;
+            let totalPrintJobs = 0;
+
+            const teamHours = {}, printerHours = {}, teamPrints = {}, teamMaterial = {}, teamHouseMaterial = {};
+            const userCategories = { 'Internal': 0, 'Teams': 0, 'Affiliated Fablab': 0, 'Partners': 0 };
+            const houseMat = {}, teamMat = {};
+
+            state.projects.forEach(p => {
+                if (p.status === 'scheduled' || p.status === 'done') {
+                    totalPrintJobs++;
+                    const dur = p.duration || 0;
+                    totalMachineHours += dur;
+                    if (dur) teamHours[p.team] = (teamHours[p.team] || 0) + dur;
+                    if (dur && p.printer) printerHours[p.printer] = (printerHours[p.printer] || 0) + dur;
+
+                    teamPrints[p.team] = (teamPrints[p.team] || 0) + 1;
+                    userCategories[getUserCategory(p.team)]++;
+
+                    if (p.filamentGroup && p.filamentUsage) {
+                        const matName = p.filamentGroup.split('|')[0];
+                        const owner = p.filamentGroup.split('|')[2];
+                        if (owner === 'House') {
+                            houseMat[matName] = (houseMat[matName] || 0) + p.filamentUsage;
+                            teamHouseMaterial[p.team] = (teamHouseMaterial[p.team] || 0) + p.filamentUsage;
+                        } else {
+                            teamMat[matName] = (teamMat[matName] || 0) + p.filamentUsage;
+                        }
+                        teamMaterial[p.team] = (teamMaterial[p.team] || 0) + p.filamentUsage;
+                    }
+                }
+
+                if (p.failedLogs) {
+                    p.failedLogs.forEach(log => {
+                        totalMachineHours += log.duration;
+                        teamHours[p.team] = (teamHours[p.team] || 0) + log.duration;
+                        if (log.printer) printerHours[log.printer] = (printerHours[log.printer] || 0) + log.duration;
+
+                        if (log.group && log.usage) {
+                            const matName = log.group.split('|')[0];
+                            const owner = log.group.split('|')[2];
+                            if (owner === 'House') {
+                                houseMat[matName] = (houseMat[matName] || 0) + log.usage;
+                                teamHouseMaterial[p.team] = (teamHouseMaterial[p.team] || 0) + log.usage;
+                            } else {
+                                teamMat[matName] = (teamMat[matName] || 0) + log.usage;
+                            }
+                            teamMaterial[p.team] = (teamMaterial[p.team] || 0) + log.usage;
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('stat-hours').innerText = totalMachineHours + ' h';
+            document.getElementById('stat-projects').innerText = totalPrintJobs;
+
+            const drawChart = (id, type, dataObj, label, bgColors) => {
+                const ctx = document.getElementById(id).getContext('2d');
+                if (charts[id]) charts[id].destroy();
+
+                const labels = Object.keys(dataObj).length ? Object.keys(dataObj) : ['Sem dados'];
+                const data = Object.keys(dataObj).length ? Object.values(dataObj) : [0];
+
+                const options = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: type !== 'bar', position: 'right' } }
+                };
+                if (type === 'bar') {
+                    options.scales = {
+                        y: { beginAtZero: true, grid: { color: gridColor } },
+                        x: { grid: { color: gridColor } }
+                    };
+                }
+
+                charts[id] = new Chart(ctx, {
+                    type,
+                    data: {
+                        labels,
+                        datasets: [{
+                            label,
+                            data,
+                            backgroundColor: bgColors || (isDark ? '#60a5fa' : '#3b82f6'),
+                            borderRadius: type === 'bar' ? 4 : 0,
+                            borderColor: isDark && type !== 'bar' ? '#1f2937' : '#ffffff',
+                            borderWidth: type !== 'bar' ? 2 : 0
+                        }]
+                    },
+                    options
+                });
+            };
+
+            const colorsPie = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'];
+
+            drawChart('chart-hours-team', 'bar', teamHours, 'Horas de impressão');
+            drawChart('chart-hours-printer', 'bar', printerHours, 'Horas por impressora', isDark ? '#34d399' : '#10b981');
+            drawChart('chart-material-team', 'bar', teamMaterial, 'Material usado (g/ml)', isDark ? '#f472b6' : '#ec4899');
+            drawChart('chart-house-material-team', 'bar', teamHouseMaterial, 'Material da casa (g/ml)', isDark ? '#f87171' : '#ef4444');
+            drawChart('chart-prints-team', 'doughnut', teamPrints, 'Impressões', colorsPie);
+
+            const activeCats = {};
+            for (let key in userCategories) if (userCategories[key] > 0) activeCats[CAT_PT[key]] = userCategories[key];
+            drawChart('chart-uses-category', 'pie', activeCats, 'Categoria', ['#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6']);
+
+            drawChart('chart-house-mat', 'bar', houseMat, 'Uso (g/ml)', isDark ? '#fbbf24' : '#f59e0b');
+            drawChart('chart-team-mat', 'bar', teamMat, 'Uso (g/ml)', isDark ? '#a78bfa' : '#8b5cf6');
+        }
+
+        function downloadCSV() {
+            const selectedPrinter = document.getElementById('export-printer').value;
+            const rows = [['Data', 'Hora', 'Status', 'Impressora', 'Projeto', 'Equipe/Pessoa', 'E-mail', 'Duração (h)', 'Material', 'Quantidade (g/ml)', 'E-mail de pronto enviado']];
+            const escapeCSV = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+
+            state.projects.forEach(p => {
+                if (p.failedLogs && p.failedLogs.length > 0) {
+                    p.failedLogs.forEach((log, index) => {
+                        if (selectedPrinter === 'ALL' || log.printer === selectedPrinter) {
+                            const matName = log.group ? log.group.split('|')[0] : '—';
+                            rows.push([
+                                escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV('FALHOU'), escapeCSV(log.printer),
+                                escapeCSV(`${p.name} (falha #${index + 1})`), escapeCSV(p.team), escapeCSV(p.email),
+                                escapeCSV(log.duration), escapeCSV(matName), escapeCSV(log.usage), escapeCSV('')
+                            ]);
+                        }
+                    });
+                }
+
+                if ((p.status === 'done' || p.status === 'scheduled') && p.printer) {
+                    if (selectedPrinter === 'ALL' || p.printer === selectedPrinter) {
+                        const matName = p.filamentGroup ? p.filamentGroup.split('|')[0] : '—';
+                        rows.push([
+                            escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV((STATUS_PT[p.status] || p.status).toUpperCase()), escapeCSV(p.printer),
+                            escapeCSV(p.name), escapeCSV(p.team), escapeCSV(p.email),
+                            escapeCSV(p.duration), escapeCSV(matName), escapeCSV(p.filamentUsage), escapeCSV(p.emailSentAt || '')
+                        ]);
+                    }
+                }
+            });
+
+            if (rows.length === 1) {
+                alert("Nenhum registro de impressão para esta máquina.");
+                return;
+            }
+
+            const csvContent = "\uFEFF" + rows.map(r => r.join(";")).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `Registros_${selectedPrinter === 'ALL' ? 'Todas' : selectedPrinter.replace(/\s+/g, '_')}_${formatYMD(new Date())}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            closeModal('modal-export');
+        }
+
+        function renderAll() {
+            renderKanban();
+            renderCalendar();
+            renderStock();
+            renderAnalytics();
+            updatePrinterStatus();
+            saveLocalState();
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        init();
+    </script>
+</body>
+</html>
