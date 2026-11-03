@@ -33,6 +33,10 @@
 
         .modal { display: none; }
         .modal.active { display: flex; animation: fadeIn 0.2s ease-in-out; }
+        .lang-btn { color: #4b5563; background: transparent; }
+        .dark .lang-btn { color: #d1d5db; }
+        .lang-btn[aria-pressed="true"] { background: #111827; color: #fff; }
+        .dark .lang-btn[aria-pressed="true"] { background: #f9fafb; color: #111827; }
     </style>
     <script>
         if (localStorage.getItem('slim3d_theme') === 'dark' || (!localStorage.getItem('slim3d_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -49,6 +53,10 @@
         <div class="p-6 border-b dark:border-gray-700">
             <h2 class="text-xl font-bold dark:text-white">Slim3D Admin</h2>
             <p class="text-xs text-gray-500 dark:text-gray-400">Fluxo de impressão e estoque</p>
+            <div class="mt-3 inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden text-xs font-semibold" role="group" aria-label="Idioma">
+                <button id="lang-pt" onclick="setLang('pt')" class="lang-btn flex items-center gap-1.5 px-2.5 py-1.5" title="Português"><svg viewBox="0 0 20 14" width="22" height="15" aria-hidden="true" style="border-radius:2px;flex:none"><rect width="20" height="14" fill="#009b3a"/><path d="M10 1.6 18.2 7 10 12.4 1.8 7z" fill="#fedf00"/><circle cx="10" cy="7" r="3.1" fill="#002776"/><path d="M7 6.4c2-.5 4.2-.2 6 .9" stroke="#fff" stroke-width=".6" fill="none"/></svg><span>PT</span></button>
+                <button id="lang-en" onclick="setLang('en')" class="lang-btn flex items-center gap-1.5 px-2.5 py-1.5 border-l border-gray-300 dark:border-gray-600" title="English"><svg viewBox="0 0 19 10" width="22" height="15" aria-hidden="true" style="border-radius:2px;flex:none" preserveAspectRatio="none"><rect width="19" height="10" fill="#fff"/><g fill="#b22234"><rect width="19" height=".77"/><rect y="1.54" width="19" height=".77"/><rect y="3.08" width="19" height=".77"/><rect y="4.62" width="19" height=".77"/><rect y="6.15" width="19" height=".77"/><rect y="7.69" width="19" height=".77"/><rect y="9.23" width="19" height=".77"/></g><rect width="7.6" height="5.38" fill="#3c3b6e"/></svg><span>EN</span></button>
+            </div>
         </div>
         <nav class="flex-1 p-4 space-y-2 text-sm font-medium" id="sidebar-nav">
             <button data-target="view-kanban" class="nav-btn w-full text-left rounded p-2 transition">Quadro de pedidos</button>
@@ -291,7 +299,7 @@
             <div class="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center gap-3"><h3 class="font-bold text-lg dark:text-white" id="job-det-name">Projeto</h3><span id="job-det-status" class="px-2 py-1 rounded text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Status</span></div>
             <div class="p-6 space-y-4 text-sm dark:text-gray-300 overflow-y-auto custom-scroll">
                 <div class="grid grid-cols-1 gap-1">
-                    <div><span class="font-semibold text-gray-700 dark:text-gray-400">Equipe:</span> <span id="job-det-team"></span></div>
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1"><span class="font-semibold text-gray-700 dark:text-gray-400">Equipe:</span> <span id="job-det-team"></span> <button id="job-det-team-edit" class="text-xs border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 px-2 py-0.5 rounded font-medium">✎ Alterar empresa</button><span id="job-det-team-orig" class="text-xs text-gray-400 w-full"></span></div>
                     <div><span class="font-semibold text-gray-700 dark:text-gray-400">E-mail:</span> <span id="job-det-email" class="break-all"></span></div>
                     <div id="job-det-phone-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Telefone:</span> <span id="job-det-phone"></span></div>
                     <div id="job-det-material-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Material:</span> <span id="job-det-material"></span></div>
@@ -313,12 +321,89 @@
                     <div class="col-span-2"><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Material usado</span> <span id="job-det-fil" class="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium border dark:border-blue-800"></span></div>
                 </div>
                 <p id="job-det-mailinfo" class="text-xs text-green-700 dark:text-green-400 hidden"></p>
+                <p id="job-det-edited" class="text-xs text-gray-400"></p>
             </div>
             <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
                 <a id="job-det-whatsapp" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">WhatsApp</a>
+                <button id="job-det-edit" class="px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 dark:text-white rounded hover:bg-gray-100 dark:hover:bg-gray-500 mr-auto">✎ Editar dados</button>
                 <button id="job-det-failed" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Falhou</button>
                 <button id="job-det-ready" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">Está pronto · enviar e-mail</button>
                 <button onclick="closeModal('modal-job-details')" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Alterar empresa / equipe -->
+    <div id="modal-team" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[480px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Alterar empresa / equipe</div>
+            <div class="p-6 space-y-4 text-sm dark:text-gray-300 overflow-y-auto custom-scroll">
+                <input type="hidden" id="team-project-id">
+                <p>Enviado no formulário: <strong id="team-orig" class="dark:text-white"></strong></p>
+                <div>
+                    <label for="team-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nome correto da empresa</label>
+                    <input type="text" id="team-input" list="team-datalist" autocomplete="off" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                    <datalist id="team-datalist"></datalist>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Nomes parecidos que já enviaram</p>
+                    <div id="team-similar" class="flex flex-wrap gap-2"></div>
+                </div>
+                <details>
+                    <summary class="cursor-pointer text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Todas as empresas</summary>
+                    <div id="team-all" class="flex flex-wrap gap-2 mt-2"></div>
+                </details>
+                <label class="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" id="team-all-check" checked class="mt-0.5">
+                    <span id="team-all-label"></span>
+                </label>
+                <p id="team-alias-info" class="text-xs text-gray-500 dark:text-gray-400"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
+                <button id="team-reset" class="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded mr-auto">Voltar ao nome enviado</button>
+                <button onclick="closeModal('modal-team')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveTeam()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Editar dados do pedido -->
+    <div id="modal-edit-job" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[480px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Editar dados do pedido</div>
+            <div class="p-6 space-y-4 overflow-y-auto custom-scroll">
+                <input type="hidden" id="edit-id">
+                <p id="edit-failed-note" class="hidden text-xs bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 p-2 rounded">Este pedido está em "Falharam": você está editando a última falha registrada.</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nome do projeto</label><input type="text" id="edit-name" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">E-mail</label><input type="email" id="edit-email" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Impressora</label>
+                        <select id="edit-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"><option value="">—</option>
+                            <optgroup label="FDM (filamento)">
+                                <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                                <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                                <option value="Sparkx I7">Sparkx I7</option>
+                            </optgroup>
+                            <optgroup label="SLA/DLP (resina)">
+                                <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                                <option value="Photon Mono">Photon Mono</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label><input type="date" id="edit-date" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Início</label><input type="time" id="edit-time" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Duração (horas)</label><input type="number" step="0.5" min="0" id="edit-duration" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material</label><select id="edit-filament" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm"></select></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantidade de material (g/ml)</label><input type="number" min="0" id="edit-usage" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                </div>
+                <p id="edit-stock-note" class="text-xs text-gray-500 dark:text-gray-400"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-edit-job')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveEditJob()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar alterações</button>
             </div>
         </div>
     </div>
@@ -463,10 +548,271 @@
         const STATUS_PT = { inbox: 'Recebido', scheduled: 'Agendado', done: 'Pronto', failed: 'Falhou' };
         const CAT_PT = { Internal: 'Interno', Teams: 'Equipes', 'Affiliated Fablab': 'Fab Lab afiliado', Partners: 'Parceiros' };
 
+        // ===== Idioma (PT / EN) =====
+        const EN = {
+"* O material é descontado do estoque quando o pedido vai para \"Prontos\"": "* Material is deducted from stock when the job moves to \"Done\"",
+"+ Adicionar": "+ Add",
+"+ Cadastrar material": "+ Register material",
+"1. Recebidos": "1. Received",
+"2. Agendados / Imprimindo": "2. Scheduled / Printing",
+"3. Prontos": "3. Done",
+"4. Falharam": "4. Failed",
+"Adicionar": "Add",
+"Adicionar pedido manual": "Add manual job",
+"Agenda das máquinas": "Machine schedule",
+"Agenda semanal": "Weekly schedule",
+"Agendar impressão e material": "Schedule & material",
+"Amarelo": "Yellow",
+"Analíticos": "Analytics",
+"Analíticos da farm": "Farm analytics",
+"Arquivos 3D:": "3D files:",
+"Arraste os cards para mudar o status ou agendar · clique para ver detalhes": "Drag cards to change status or schedule · click for details",
+"Azul": "Blue",
+"Ação": "Action",
+"Baixar CSV": "Download CSV",
+"Baixe uma planilha com todas as impressões agendadas, prontas e que falharam.": "Download a spreadsheet of all scheduled, completed and failed prints.",
+"Branco": "White",
+"Buscar respostas do formulário ↻": "Fetch form submissions ↻",
+"Cadastrar": "Register",
+"Cadastrar material": "Register material",
+"Cancelar": "Cancel",
+"Casa (Slim3D) ou nome da equipe": "House (Slim3D) or team name",
+"Categorias de uso (%)": "Usage categories (%)",
+"Cinza": "Gray",
+"Confirmar": "Confirm",
+"Cor": "Color",
+"Data": "Date",
+"Data de fim": "End date",
+"Data de início": "Start date",
+"Descontar": "Subtract",
+"Descrição": "Description",
+"Descrição:": "Description:",
+"Dono (deixe vazio para o estoque da casa)": "Owner (leave empty for house stock)",
+"Duração estimada (horas)": "Estimated duration (hours)",
+"E-mail (para o aviso de pronto)": "Email (for the ready notice)",
+"E-mail:": "Email:",
+"Equipe": "Team",
+"Equipe ou pessoa": "Team or person",
+"Equipe:": "Team:",
+"Este ano": "This year",
+"Este mês": "This month",
+"Estoque de material": "Material stock",
+"Está pronto · enviar e-mail": "It's ready · send email",
+"Exportar registros (CSV)": "Export logs (CSV)",
+"FDM (filamento)": "FDM (filament)",
+"FDM de engenharia": "Engineering FDM",
+"FDM padrão": "Standard FDM",
+"Falhou": "Failed",
+"Fechar": "Close",
+"Filamento próprio:": "Own filament:",
+"Filtrar por impressora": "Filter by printer",
+"Fluxo de impressão e estoque": "Print workflow & inventory",
+"Hoje": "Today",
+"Horas de impressão por equipe": "Print hours by team",
+"Horas de máquina": "Machine hours",
+"Horas por impressora": "Hours per printer",
+"Horário agendado": "Scheduled time",
+"Impressora": "Printer",
+"Impressora usada": "Printer used",
+"Impressões por equipe (%)": "Prints by team (%)",
+"Início": "Start time",
+"Isso desconta do estoque o material perdido e registra o tempo de máquina gasto.": "This deducts the wasted material from stock and logs the machine time lost.",
+"Laranja": "Orange",
+"Marca": "Brand",
+"Materiais da casa mais usados": "Most used house materials",
+"Materiais das equipes mais usados": "Most used team materials",
+"Material da casa usado por equipe (g/ml)": "House material used by team (g/ml)",
+"Material e marca": "Material & brand",
+"Material perdido": "Wasted material",
+"Material total usado por equipe (g/ml)": "Total material used by team (g/ml)",
+"Material usado": "Assigned material",
+"Material:": "Material:",
+"Modo escuro": "Dark mode",
+"Modo claro": "Light mode",
+"Mês passado": "Last month",
+"Nome do projeto": "Project name",
+"PA (nylon)": "PA (nylon)",
+"PETG-CF (fibra de carbono)": "PETG-CF (carbon fiber)",
+"Peso / volume (g ou ml)": "Weight / volume (g or ml)",
+"Preto": "Black",
+"Projeto": "Project",
+"Quadro de pedidos": "Workflow board",
+"Quantidade perdida (g/ml)": "Wasted amount (g/ml)",
+"Quantidade usada": "Amount used",
+"Registrar falha": "Log failure",
+"Registrar impressão com falha": "Log failed print",
+"Registrar uso manual": "Log manual usage",
+"Resina": "Resin",
+"Resina (lavável em água)": "Resin (water-washable)",
+"Resina (padrão)": "Resin (standard)",
+"Resina (tough)": "Resin (tough)",
+"Restante (g/ml)": "Remaining (g/ml)",
+"Roxo": "Purple",
+"SLA/DLP (resina)": "SLA/DLP (resin)",
+"Telefone / WhatsApp": "Phone / WhatsApp",
+"Telefone:": "Phone:",
+"Tempo perdido (horas)": "Time wasted (hours)",
+"Tipo de material": "Material type",
+"Todas as impressoras": "All printers",
+"Todo o período": "All time",
+"Total de impressões": "Total print jobs",
+"Transparente": "Clear",
+"Unidades de material": "Material units",
+"Unidades/rolos": "Units/rolls",
+"Uso (g/ml)": "Usage (g/ml)",
+"Verde": "Green",
+"Vermelho": "Red",
+"aluno@universidade.edu.br": "student@university.edu",
+"ex.: Creality": "e.g. Creality",
+"Últimos 30 dias": "Last 30 days",
+"Últimos 7 dias": "Last 7 days",
+"🏠 Slim3D / Creality (estoque da casa)": "🏠 Slim3D / Creality (house stock)",
+"👥 Material das equipes": "👥 Team-owned stock",
+"💾 Salvar backup": "💾 Save backup",
+"📂 Carregar backup": "📂 Load backup",
+"🔍 Buscar projeto, equipe, e-mail...": "🔍 Search projects, teams, emails...",
+"Idioma": "Language",
+"Arquivo {0}": "File {0}",
+"Arquivo de backup inválido.": "Invalid backup file format.",
+"Backup carregado com sucesso!": "Backup file successfully loaded!",
+"Erro ao ler o arquivo.": "Error reading file.",
+"O nome do projeto é obrigatório.": "Project name is required.",
+"Livre": "Idle",
+"Imprimindo": "Printing",
+"Concluída": "Done",
+"({0}h no total)": "({0}h total)",
+"Horário:": "Time:",
+"Impressora:": "Printer:",
+"Baixar arquivo": "Download file",
+"✉ e-mail enviado {0}": "✉ email sent {0}",
+"Nenhum e-mail associado.": "No email associated.",
+"Sem descrição.": "No description.",
+"⬇ Baixar": "⬇ Download",
+"Abrir ↗": "Open ↗",
+"Nenhum arquivo anexado.": "No file attached.",
+"Recebido": "Received",
+"Agendado": "Scheduled",
+"Pronto": "Done",
+"{0} às {1} ({2}h)": "{0} at {1} ({2}h)",
+"✉ E-mail de \"pronto\" enviado em {0} para {1}": "✉ \"Ready\" email sent on {0} to {1}",
+"Reenviar e-mail de pronto": "Resend ready email",
+"Enviando…": "Sending…",
+"O e-mail de pronto já foi enviado em {0}. Enviar de novo para {1}?": "The ready email was already sent on {0}. Send it again to {1}?",
+"Marcar \"{0}\" como pronto e enviar o e-mail para {1}?": "Mark \"{0}\" as done and send the email to {1}?",
+"(sem e-mail)": "(no email)",
+"Descontado {0} g/ml do estoque. ": "Deducted {0} g/ml from stock. ",
+"Atenção: faltou registrar {0} g/ml no estoque. ": "Warning: {0} g/ml missing from recorded stock. ",
+"E-mail de pronto enviado para {0}!": "Ready email sent to {0}!",
+"O pedido foi marcado como pronto, mas o e-mail não foi enviado. Tente de novo pelo botão nos detalhes.": "The job was marked as done, but the email failed to send. Try again with the button in the details.",
+"Pedido marcado como pronto, mas não há e-mail válido nesta resposta.": "Job marked as done, but there is no valid email for this submission.",
+"Hora": "Time",
+"[{0} restantes]": "[{0} left]",
+"Casa (Slim3D)": "House (Slim3D)",
+"unidade(s)": "unit(s)",
+"Registrar uso": "Log usage",
+"Preencha todos os campos.": "Please fill all fields.",
+"CONFLITO: a {0} já está ocupada nesse horário.": "CONFLICT: {0} is busy during this time block.",
+"Atenção: faltou registrar {0} g/ml no estoque.": "Warning: {0} g/ml missing from recorded stock.",
+"De {0} a {1}": "From {0} to {1}",
+"A partir de {0}": "From {0}",
+"Até {0}": "Until {0}",
+"{0} impressão(ões) · {1} falha(s) · {2} h de máquina": "{0} print(s) · {1} failure(s) · {2} machine hours",
+"(pela data agendada da impressão; o CSV também segue este período)": "(by scheduled print date; the CSV export uses this period too)",
+"Sem dados": "No data",
+"Horas de impressão": "Print hours",
+"Material usado (g/ml)": "Material used (g/ml)",
+"Material da casa (g/ml)": "House material (g/ml)",
+"Impressões": "Prints",
+"Categoria": "Category",
+"Interno": "Internal",
+"Equipes": "Teams",
+"Fab Lab afiliado": "Affiliated Fab Lab",
+"Parceiros": "Partners",
+"Equipe/Pessoa": "Team/User",
+"E-mail": "Email",
+"Duração (h)": "Duration (h)",
+"Quantidade (g/ml)": "Amount (g/ml)",
+"E-mail de pronto enviado": "Ready email sent",
+"FALHOU": "FAILED",
+"(falha #{0})": "(fail #{0})",
+"Registros": "Print_Logs",
+"Todas": "All",
+"Nenhum registro de impressão para esta máquina no período escolhido.": "No print logs found for this machine in the selected period.",
+"✎ Alterar empresa": "✎ Change company",
+"Alterar empresa / equipe": "Change company / team",
+"Enviado no formulário:": "Sent in the form:",
+"Nome correto da empresa": "Correct company name",
+"Nomes parecidos que já enviaram": "Similar names already submitted",
+"Todas as empresas": "All companies",
+"Voltar ao nome enviado": "Back to the submitted name",
+"Salvar": "Save",
+"Enviado no formulário como: {0}": "Sent in the form as: {0}",
+"Nenhum nome parecido encontrado.": "No similar names found.",
+"Aplicar a todos os pedidos enviados como \"{0}\" ({1}), inclusive os próximos": "Apply to all jobs submitted as \"{0}\" ({1}), including future ones",
+"Hoje \"{0}\" já está unificado como \"{1}\".": "\"{0}\" is currently merged into \"{1}\".",
+"Escreva o nome da empresa.": "Please type the company name.",
+"✎ Editar dados": "✎ Edit details",
+"Editar dados do pedido": "Edit job details",
+"Este pedido está em \"Falharam\": você está editando a última falha registrada.": "This job is in \"Failed\": you are editing the last failure logged.",
+"Duração (horas)": "Duration (hours)",
+"Quantidade de material (g/ml)": "Material amount (g/ml)",
+"Salvar alterações": "Save changes",
+"[sem estoque]": "[out of stock]",
+"O material já foi descontado do estoque. Ao salvar, o painel devolve a quantidade antiga e desconta a nova automaticamente.": "Material was already deducted from stock. On save, the panel returns the old amount and deducts the new one automatically.",
+"O material só é descontado do estoque quando o pedido vai para \"Prontos\".": "Material is only deducted from stock when the job moves to \"Done\".",
+"Escolha o material e a quantidade juntos.": "Choose the material and the amount together.",
+"✎ Editado em {0}": "✎ Edited on {0}"
+};
+        let LANG = 'pt';
+        try { if (localStorage.getItem('slim3d_lang') === 'en') LANG = 'en'; } catch (e) {}
+        // T('texto em português {0}', valor) devolve o texto no idioma atual
+        function T(s, ...a) {
+            const r = (LANG === 'en' && EN[s] !== undefined) ? EN[s] : s;
+            return String(r).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '');
+        }
+        const LOC = () => LANG === 'en' ? 'en-US' : 'pt-BR';
+        // Traduz os textos fixos da página (guarda o original em português)
+        const ORIG_TXT = new WeakMap(), ORIG_ATTR = new WeakMap();
+        function translateStatic() {
+            const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode: n => (n.parentElement && !n.parentElement.closest('script,style')) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+            });
+            let n;
+            while ((n = w.nextNode())) {
+                if (!ORIG_TXT.has(n)) ORIG_TXT.set(n, n.nodeValue);
+                const o = ORIG_TXT.get(n), k = o.trim();
+                if (!k || EN[k] === undefined) continue;
+                n.nodeValue = LANG === 'en' ? o.replace(k, EN[k]) : o;
+            }
+            document.querySelectorAll('[placeholder],[title],optgroup[label],[aria-label]').forEach(el => {
+                const st = ORIG_ATTR.get(el) || {};
+                ['placeholder', 'title', 'label', 'aria-label'].forEach(a => {
+                    if (!el.hasAttribute(a)) return;
+                    if (!(a in st)) st[a] = el.getAttribute(a);
+                    const o = st[a];
+                    if (EN[o] !== undefined) el.setAttribute(a, LANG === 'en' ? EN[o] : o);
+                });
+                ORIG_ATTR.set(el, st);
+            });
+            document.documentElement.lang = LANG === 'en' ? 'en' : 'pt-BR';
+            document.title = LANG === 'en' ? 'Admin Dashboard | Slim3D Print Farm' : 'Painel Admin | Slim3D Print Farm';
+            document.getElementById('lang-pt').setAttribute('aria-pressed', LANG === 'pt');
+            document.getElementById('lang-en').setAttribute('aria-pressed', LANG === 'en');
+        }
+        let openDetailsId = null;
+        function setLang(l) {
+            LANG = l === 'en' ? 'en' : 'pt';
+            try { localStorage.setItem('slim3d_lang', LANG); } catch (e) {}
+            translateStatic();
+            updateThemeIcon();
+            renderAll();
+            if (openDetailsId && document.getElementById('modal-job-details').classList.contains('active')) openJobDetails(openDetailsId);
+        }
+
         const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        const ownerLabel = o => o === 'House' ? 'Casa (Slim3D)' : o;
-        const fmtBR = iso => iso ? iso.split('-').reverse().join('/') : '';
-        const nowBR = () => new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+        const ownerLabel = o => o === 'House' ? T('Casa (Slim3D)') : o;
+        const fmtBR = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-'); return LANG === 'en' ? `${m}/${d}/${y}` : `${d}/${m}/${y}`; };
+        const nowBR = () => new Date().toLocaleString(LOC(), { dateStyle: 'short', timeStyle: 'short' });
 
         const formatYMD = (d) => {
             const year = d.getFullYear();
@@ -496,6 +842,7 @@
                 { id: 'f3', brand: 'Overture TPU', color: 'Preto', colorCss: 'bg-black', owner: 'Robotics Team', weight: 600, max: 1000 },
                 { id: 'f4', brand: 'Anycubic Resina (padrão)', color: 'Cinza', colorCss: 'bg-gray-500', owner: 'House', weight: 1000, max: 1000 }
             ],
+            teamAliases: {},
             draggedId: null
         };
 
@@ -514,7 +861,7 @@
             else if (fp.fileUrl && fp.fileUrl !== '#') raw = String(fp.fileUrl).split(/[,\s]+/).filter(Boolean);
             return raw.map((f, i) => {
                 const url = typeof f === 'string' ? f : (f.url || '');
-                const name = (typeof f === 'object' && f.name) ? f.name : `Arquivo ${i + 1}`;
+                const name = (typeof f === 'object' && f.name) ? f.name : T('Arquivo {0}', i + 1);
                 const id = driveId(url);
                 return {
                     name,
@@ -543,7 +890,7 @@
         function updateThemeIcon() {
             const isDark = document.documentElement.classList.contains('dark');
             document.getElementById('theme-icon').innerText = isDark ? '☀️' : '🌙';
-            document.getElementById('theme-text').innerText = isDark ? 'Modo claro' : 'Modo escuro';
+            document.getElementById('theme-text').innerText = isDark ? T('Modo claro') : T('Modo escuro');
         }
 
         // ===== Salvar / carregar =====
@@ -557,6 +904,7 @@
                 const parsed = JSON.parse(s);
                 state.projects = parsed.projects || [];
                 state.filaments = parsed.filaments || [];
+                state.teamAliases = parsed.teamAliases || {};
             }
         }
 
@@ -584,13 +932,14 @@
                     if (loaded.projects && loaded.filaments) {
                         state.projects = loaded.projects;
                         state.filaments = loaded.filaments;
+                        state.teamAliases = loaded.teamAliases || {};
                         renderAll();
-                        alert("Backup carregado com sucesso!");
+                        alert(T('Backup carregado com sucesso!'));
                     } else {
-                        alert("Arquivo de backup inválido.");
+                        alert(T('Arquivo de backup inválido.'));
                     }
                 } catch (err) {
-                    alert("Erro ao ler o arquivo.");
+                    alert(T('Erro ao ler o arquivo.'));
                 }
                 event.target.value = '';
             };
@@ -598,6 +947,7 @@
         }
 
         async function init() {
+            translateStatic();
             updateThemeIcon();
             document.getElementById('an-start').value = anStart;
             document.getElementById('an-end').value = anEnd;
@@ -645,6 +995,8 @@
                             filamentUsage: existing.filamentUsage,
                             deducted: existing.deducted,
                             emailSentAt: existing.emailSentAt || null,
+                            teamOverride: existing.teamOverride || null,
+                            ...(existing.editedAt ? { name: existing.name, email: existing.email, editedAt: existing.editedAt } : {}),
                             failedLogs: existing.failedLogs || []
                         };
                     }
@@ -684,7 +1036,7 @@
             const phone = document.getElementById('add-job-phone').value || '';
             const desc = document.getElementById('add-job-desc').value || '';
 
-            if (!name) return alert("O nome do projeto é obrigatório.");
+            if (!name) return alert(T('O nome do projeto é obrigatório.'));
 
             state.projects.push({
                 id: 'p' + Date.now(),
@@ -738,14 +1090,14 @@
                     }
                 }
 
-                let textDisplay = currentStatus;
+                let textDisplay = T(currentStatus);
                 if (currentStatus === 'Imprimindo') textDisplay += ` (${percent}%)`;
 
                 html += `
                     <div class="flex items-center gap-2 px-3 py-1 ${statusClass} border rounded text-xs whitespace-nowrap transition-colors duration-200">
                         <span class="w-2 h-2 rounded-full ${dotClass}"></span>
                         <span class="font-bold">${printerName}</span>: ${textDisplay}
-                        <span class="text-gray-400 dark:text-gray-500 text-[10px] ml-1">(${totalHoursOnMachine}h no total)</span>
+                        <span class="text-gray-400 dark:text-gray-500 text-[10px] ml-1">${T('({0}h no total)', totalHoursOnMachine)}</span>
                     </div>`;
             });
             headerContainer.innerHTML = html;
@@ -758,7 +1110,7 @@
             state.projects.forEach(p => {
                 const ok = !q ||
                     (p.name && p.name.toLowerCase().includes(q)) ||
-                    (p.team && p.team.toLowerCase().includes(q)) ||
+                    (teamOf(p) && teamOf(p).toLowerCase().includes(q)) || (p.team && p.team.toLowerCase().includes(q)) ||
                     (p.email && p.email.toLowerCase().includes(q));
                 if (cols[p.status] && ok) cols[p.status].push(p);
             });
@@ -784,23 +1136,23 @@
                         if (p.date || p.printer) {
                             extraInfo = `
                             <div class="mt-2 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-1.5 rounded border border-gray-100 dark:border-gray-600">
-                                <p><strong>Horário:</strong> ${esc(fmtBR(p.date))} • ${esc(p.time || '')}</p>
-                                <p><strong>Impressora:</strong> ${esc(p.printer || '—')}</p>
-                                <p><strong>Material:</strong> ${esc(displayUsage ?? 0)} g/ml (${esc(matDisplay)})</p>
+                                <p><strong>${T('Horário:')}</strong> ${esc(fmtBR(p.date))} • ${esc(p.time || '')}</p>
+                                <p><strong>${T('Impressora:')}</strong> ${esc(p.printer || '—')}</p>
+                                <p><strong>${T('Material:')}</strong> ${esc(displayUsage ?? 0)} g/ml (${esc(matDisplay)})</p>
                             </div>`;
                         }
                     }
                     const files = p.files || [];
                     const fileBtns = files.length
-                        ? `<a href="${esc(files[0].download)}" target="_blank" rel="noopener" class="text-xs border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 px-1.5 py-0.5 rounded" title="Baixar arquivo" onclick="event.stopPropagation()">⬇${files.length > 1 ? ' ' + files.length : ''}</a>`
+                        ? `<a href="${esc(files[0].download)}" target="_blank" rel="noopener" class="text-xs border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 px-1.5 py-0.5 rounded" title="${T('Baixar arquivo')}" onclick="event.stopPropagation()">⬇${files.length > 1 ? ' ' + files.length : ''}</a>`
                         : '';
-                    const mailTag = p.emailSentAt ? `<span class="text-[10px] text-green-700 dark:text-green-400 block mt-1">✉ e-mail enviado ${esc(p.emailSentAt)}</span>` : '';
+                    const mailTag = p.emailSentAt ? `<span class="text-[10px] text-green-700 dark:text-green-400 block mt-1">${T('✉ e-mail enviado {0}', esc(p.emailSentAt))}</span>` : '';
 
                     const card = document.createElement('div');
                     card.className = "bg-white dark:bg-gray-700 p-3 rounded border border-gray-200 dark:border-gray-600 mb-2 shadow-sm kanban-card transition-shadow hover:shadow-md";
                     card.draggable = true; card.id = p.id;
                     card.innerHTML = `
-                        <span class="text-xs font-semibold bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded mb-2 inline-block">${esc(p.team)}</span>
+                        <span class="text-xs font-semibold bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded mb-2 inline-block">${esc(teamOf(p))}</span>
                         <div class="flex justify-between items-start gap-2">
                             <h4 class="font-medium text-sm text-blue-900 dark:text-blue-300">${esc(p.name)}</h4>
                             <div class="flex gap-1 flex-shrink-0">${fileBtns}</div>
@@ -827,11 +1179,14 @@
         function openJobDetails(id) {
             const p = state.projects.find(proj => proj.id === id);
             if (!p) return;
+            openDetailsId = id;
             const $ = i => document.getElementById(i);
             $('job-det-name').innerText = p.name;
-            $('job-det-team').innerText = p.team || '—';
-            $('job-det-email').innerText = p.email || 'Nenhum e-mail associado.';
-            $('job-det-desc').innerText = p.description || 'Sem descrição.';
+            $('job-det-team').innerText = teamOf(p) || '—';
+            $('job-det-team-orig').innerText = (p.team && teamOf(p) !== p.team) ? T('Enviado no formulário como: {0}', p.team) : '';
+            $('job-det-team-edit').onclick = () => openTeamModal(p.id);
+            $('job-det-email').innerText = p.email || T('Nenhum e-mail associado.');
+            $('job-det-desc').innerText = p.description || T('Sem descrição.');
 
             const rowFill = (row, el, val) => { $(row).classList.toggle('hidden', !val); $(el).innerText = val || ''; };
             rowFill('job-det-phone-row', 'job-det-phone', p.phone);
@@ -842,16 +1197,16 @@
             $('job-det-files').innerHTML = files.length
                 ? files.map(f => `
                     <div class="bg-gray-50 dark:bg-gray-700 p-2.5 rounded border dark:border-gray-600 flex justify-between items-center gap-2">
-                        <span class="font-medium truncate">${esc(f.name)}</span>
+                        <span class="font-medium truncate">${esc(/^(Arquivo|File) \d+$/.test(f.name) ? T('Arquivo {0}', f.name.split(' ')[1]) : f.name)}</span>
                         <span class="flex gap-1 flex-shrink-0">
-                            <a href="${esc(f.download)}" target="_blank" rel="noopener" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium">⬇ Baixar</a>
-                            <a href="${esc(f.view)}" target="_blank" rel="noopener" class="text-xs bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white px-3 py-1.5 rounded font-medium">Abrir ↗</a>
+                            <a href="${esc(f.download)}" target="_blank" rel="noopener" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium">${T('⬇ Baixar')}</a>
+                            <a href="${esc(f.view)}" target="_blank" rel="noopener" class="text-xs bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white px-3 py-1.5 rounded font-medium">${T('Abrir ↗')}</a>
                         </span>
                     </div>`).join('')
-                : '<p class="text-gray-500 dark:text-gray-400">Nenhum arquivo anexado.</p>';
+                : `<p class="text-gray-500 dark:text-gray-400">${T('Nenhum arquivo anexado.')}</p>`;
 
             const statusEl = $('job-det-status');
-            statusEl.innerText = STATUS_PT[p.status] || p.status;
+            statusEl.innerText = T(STATUS_PT[p.status] || p.status);
             let cls = 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
             if (p.status === 'done') cls = 'bg-green-100 dark:bg-green-900 dark:text-green-200 text-green-800';
             if (p.status === 'scheduled') cls = 'bg-blue-100 dark:bg-blue-900 dark:text-blue-200 text-blue-800';
@@ -862,7 +1217,7 @@
             if ((p.status === 'scheduled' || p.status === 'done' || p.status === 'failed') && p.printer) {
                 sched.classList.remove('hidden');
                 $('job-det-printer').innerText = p.printer;
-                $('job-det-time').innerText = `${fmtBR(p.date)} às ${p.time} (${p.duration}h)`;
+                $('job-det-time').innerText = T('{0} às {1} ({2}h)', fmtBR(p.date), p.time, p.duration);
                 const filName = p.filamentGroup ? p.filamentGroup.split('|')[0] + ' (' + p.filamentGroup.split('|')[1] + ')' : '—';
                 $('job-det-fil').innerText = `${filName} · ${p.filamentUsage || 0} g/ml`;
             } else {
@@ -874,16 +1229,18 @@
             $('job-det-whatsapp').href = wa || '#';
 
             const info = $('job-det-mailinfo');
+            $('job-det-edited').innerText = p.editedAt ? T('✎ Editado em {0}', p.editedAt) : '';
             info.classList.toggle('hidden', !p.emailSentAt);
-            info.innerText = p.emailSentAt ? `✉ E-mail de "pronto" enviado em ${p.emailSentAt} para ${p.email}` : '';
+            info.innerText = p.emailSentAt ? T('✉ E-mail de "pronto" enviado em {0} para {1}', p.emailSentAt, p.email) : '';
 
             $('job-det-failed').onclick = () => { closeModal('modal-job-details'); openFailed(p); };
+            $('job-det-edit').onclick = () => openEditJob(p.id);
 
             const btn = $('job-det-ready');
             btn.disabled = false;
-            btn.innerText = p.emailSentAt ? 'Reenviar e-mail de pronto' : 'Está pronto · enviar e-mail';
+            btn.innerText = p.emailSentAt ? T('Reenviar e-mail de pronto') : T('Está pronto · enviar e-mail');
             btn.onclick = async () => {
-                btn.disabled = true; btn.innerText = 'Enviando…';
+                btn.disabled = true; btn.innerText = T('Enviando…');
                 await markDone(p);
                 openJobDetails(p.id);
             };
@@ -893,10 +1250,10 @@
 
         // Marca como pronto: desconta material e envia o e-mail para quem respondeu o formulário
         async function markDone(proj) {
-            if (proj.emailSentAt && !confirm(`O e-mail de pronto já foi enviado em ${proj.emailSentAt}. Enviar de novo para ${proj.email}?`)) {
+            if (proj.emailSentAt && !confirm(T('O e-mail de pronto já foi enviado em {0}. Enviar de novo para {1}?', proj.emailSentAt, proj.email))) {
                 proj.status = 'done'; renderAll(); return;
             }
-            if (!proj.emailSentAt && proj.status !== 'done' && !confirm(`Marcar "${proj.name}" como pronto e enviar o e-mail para ${proj.email || '(sem e-mail)'}?`)) {
+            if (!proj.emailSentAt && proj.status !== 'done' && !confirm(T('Marcar "{0}" como pronto e enviar o e-mail para {1}?', proj.name, proj.email || T('(sem e-mail)')))) {
                 renderAll(); return;
             }
 
@@ -905,8 +1262,8 @@
             if (proj.filamentGroup && proj.filamentUsage && !proj.deducted) {
                 const shortage = deductFilamentFromGroup(proj.filamentGroup, proj.filamentUsage);
                 proj.deducted = true;
-                msg += `Descontado ${proj.filamentUsage} g/ml do estoque. `;
-                if (shortage > 0) msg += `Atenção: faltou registrar ${shortage} g/ml no estoque. `;
+                msg += T('Descontado {0} g/ml do estoque. ', proj.filamentUsage);
+                if (shortage > 0) msg += T('Atenção: faltou registrar {0} g/ml no estoque. ', shortage);
             }
 
             if (proj.email && proj.email.includes('@')) {
@@ -917,13 +1274,13 @@
                         project_name: proj.name
                     });
                     proj.emailSentAt = nowBR();
-                    msg += `E-mail de pronto enviado para ${proj.email}!`;
+                    msg += T('E-mail de pronto enviado para {0}!', proj.email);
                 } catch (err) {
                     console.error("Erro no EmailJS:", err);
-                    msg += "O pedido foi marcado como pronto, mas o e-mail não foi enviado. Tente de novo pelo botão nos detalhes.";
+                    msg += T('O pedido foi marcado como pronto, mas o e-mail não foi enviado. Tente de novo pelo botão nos detalhes.');
                 }
             } else {
-                msg += "Pedido marcado como pronto, mas não há e-mail válido nesta resposta.";
+                msg += T('Pedido marcado como pronto, mas não há e-mail válido nesta resposta.');
             }
             renderAll();
             alert(msg);
@@ -935,12 +1292,12 @@
         function renderCalendar() {
             const startOfWeek = getStartOfWeek(weekOffset);
             const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6);
-            document.getElementById('week-label').innerText = `${startOfWeek.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} – ${endOfWeek.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+            document.getElementById('week-label').innerText = `${startOfWeek.toLocaleDateString(LOC(), { day: 'numeric', month: 'short' })} – ${endOfWeek.toLocaleDateString(LOC(), { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
             const header = document.getElementById('calendar-header');
-            let headHTML = `<div class="w-16 py-2 border-r dark:border-gray-700">Hora</div>`;
+            let headHTML = `<div class="w-16 py-2 border-r dark:border-gray-700">${T('Hora')}</div>`;
             const columnDates = [];
-            const DIAS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+            const DIAS = LANG === 'en' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
             for (let i = 0; i < 7; i++) {
                 const colDate = new Date(startOfWeek);
@@ -1048,7 +1405,7 @@
                 const g = groups[key];
                 const opt = document.createElement('option');
                 opt.value = key;
-                opt.innerText = `${g.brand} (${g.color}) - ${ownerLabel(g.owner)} [${g.weight} restantes]`;
+                opt.innerText = `${g.brand} (${g.color}) - ${ownerLabel(g.owner)} ${T('[{0} restantes]', g.weight)}`;
                 sel.appendChild(opt);
             }
         }
@@ -1065,14 +1422,14 @@
                         <td class="px-4 py-3 font-medium dark:text-gray-200">${esc(g.brand)}</td>
                         ${g.owner !== 'House' ? `<td class="px-4 py-3"><span class="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded text-xs">${esc(g.owner)}</span></td>` : ''}
                         <td class="px-4 py-3 flex items-center gap-2 dark:text-gray-300"><span class="w-3 h-3 rounded-full ${g.colorCss} border dark:border-gray-600 shadow-sm"></span> ${esc(g.color)}</td>
-                        <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">${g.rolls} <span class="text-xs text-gray-400 dark:text-gray-500 font-normal">unidade(s)</span></td>
+                        <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">${g.rolls} <span class="text-xs text-gray-400 dark:text-gray-500 font-normal">${T('unidade(s)')}</span></td>
                         <td class="px-4 py-3">
                             <div class="flex items-center gap-2">
                                 <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div class="${barColor} h-2 rounded-full" style="width: ${pct}%"></div></div>
                                 <span class="text-xs ${pct <= 20 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-600 dark:text-gray-400'}">${g.weight}</span>
                             </div>
                         </td>
-                        <td class="px-4 py-3 text-right"><button onclick="promptUsage('${esc(g.key)}')" class="text-blue-600 dark:text-blue-400 hover:underline text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">Registrar uso</button></td>
+                        <td class="px-4 py-3 text-right"><button onclick="promptUsage('${esc(g.key)}')" class="text-blue-600 dark:text-blue-400 hover:underline text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">${T('Registrar uso')}</button></td>
                     </tr>`;
                 if (g.owner === 'House') hBody.innerHTML += row; else tBody.innerHTML += row;
             });
@@ -1104,6 +1461,183 @@
                 owner, weight: w, max: w
             });
             closeModal('modal-add-spool'); renderAll();
+        }
+
+
+        // ===== Empresas / equipes: unificar nomes escritos de jeitos diferentes =====
+        // teamAliases: { "fab lab joinvile": "Fab Lab Joinville" }  (chave = nome enviado normalizado)
+        const normTeam = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        function teamOf(p) {
+            if (!p) return '';
+            if (p.teamOverride) return p.teamOverride;
+            const a = (state.teamAliases || {})[normTeam(p.team)];
+            return a || p.team || '';
+        }
+        function lev(a, b) {
+            const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+            let prev = Array.from({ length: n + 1 }, (_, j) => j);
+            for (let i = 1; i <= m; i++) {
+                const cur = [i];
+                for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+                prev = cur;
+            }
+            return prev[n];
+        }
+        // 0 a 1: quanto dois nomes de empresa se parecem
+        function teamSimilarity(x, y) {
+            const a = normTeam(x), b = normTeam(y);
+            if (!a || !b) return 0;
+            if (a === b) return 1;
+            const a2 = a.replace(/ /g, ''), b2 = b.replace(/ /g, '');
+            if (a2 === b2) return 0.98;
+            if (a2.includes(b2) || b2.includes(a2)) return 0.85;
+            const ed = 1 - lev(a2, b2) / Math.max(a2.length, b2.length);
+            const ta = new Set(a.split(' ')), tb = new Set(b.split(' '));
+            let common = 0; ta.forEach(t => { if ([...tb].some(u => u === t || (t.length > 3 && u.length > 3 && 1 - lev(t, u) / Math.max(t.length, u.length) >= 0.75))) common++; });
+            const tok = common / Math.max(ta.size, tb.size);
+            return Math.max(ed, tok * 0.9);
+        }
+        function allTeams() {
+            const set = new Map();
+            state.projects.forEach(p => {
+                [teamOf(p), p.team].forEach(t => { if (t && !set.has(normTeam(t))) set.set(normTeam(t), t); });
+            });
+            Object.values(state.teamAliases || {}).forEach(t => { if (t && !set.has(normTeam(t))) set.set(normTeam(t), t); });
+            return [...set.values()].sort((a, b) => a.localeCompare(b, 'pt'));
+        }
+        function teamChip(name, extra) {
+            const n = state.projects.filter(p => normTeam(teamOf(p)) === normTeam(name) || normTeam(p.team) === normTeam(name)).length;
+            return `<button type="button" data-team="${esc(name)}" class="team-chip text-xs border border-gray-300 dark:border-gray-600 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2.5 py-1 rounded-full">${esc(name)} <span class="text-gray-400">· ${n}${extra || ''}</span></button>`;
+        }
+        function openTeamModal(id) {
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            const $ = i => document.getElementById(i);
+            $('team-project-id').value = id;
+            $('team-orig').innerText = p.team || '—';
+            $('team-input').value = teamOf(p);
+            const teams = allTeams();
+            $('team-datalist').innerHTML = teams.map(t => `<option value="${esc(t)}">`).join('');
+            const base = p.team || teamOf(p);
+            const sim = teams.map(t => [t, teamSimilarity(base, t)])
+                .filter(([t, sc]) => sc >= 0.55 && normTeam(t) !== normTeam(base))
+                .sort((a, b) => b[1] - a[1]).slice(0, 12);
+            $('team-similar').innerHTML = sim.length ? sim.map(([t, sc]) => teamChip(t, ` · ${Math.round(sc * 100)}%`)).join('')
+                : `<span class="text-gray-500 dark:text-gray-400">${T('Nenhum nome parecido encontrado.')}</span>`;
+            $('team-all').innerHTML = teams.map(t => teamChip(t)).join('');
+            document.querySelectorAll('#modal-team .team-chip').forEach(b => b.onclick = () => { $('team-input').value = b.dataset.team; $('team-input').focus(); });
+            const same = state.projects.filter(x => normTeam(x.team) === normTeam(p.team)).length;
+            $('team-all-label').innerText = T('Aplicar a todos os pedidos enviados como "{0}" ({1}), inclusive os próximos', p.team || '—', same);
+            const alias = (state.teamAliases || {})[normTeam(p.team)];
+            $('team-alias-info').innerText = alias ? T('Hoje "{0}" já está unificado como "{1}".', p.team, alias) : '';
+            $('team-reset').onclick = () => resetTeam(id);
+            openModal('modal-team');
+            setTimeout(() => $('team-input').select(), 50);
+        }
+        function saveTeam() {
+            const id = document.getElementById('team-project-id').value;
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            let name = document.getElementById('team-input').value.trim();
+            if (!name) return alert(T('Escreva o nome da empresa.'));
+            // reaproveita a grafia de um nome já existente igual (ignorando maiúsculas e acentos)
+            const same = allTeams().find(t => normTeam(t) === normTeam(name)); if (same) name = same;
+            state.teamAliases = state.teamAliases || {};
+            if (document.getElementById('team-all-check').checked && p.team) {
+                if (normTeam(name) === normTeam(p.team)) delete state.teamAliases[normTeam(p.team)];
+                else state.teamAliases[normTeam(p.team)] = name;
+                state.projects.forEach(x => { if (normTeam(x.team) === normTeam(p.team)) x.teamOverride = null; });
+                // quem já apontava para o nome antigo passa a apontar para o novo
+                const old = teamOf(p);
+                Object.keys(state.teamAliases).forEach(k => { if (normTeam(state.teamAliases[k]) === normTeam(p.team)) state.teamAliases[k] = name; });
+            } else {
+                p.teamOverride = (normTeam(name) === normTeam(p.team)) ? null : name;
+            }
+            closeModal('modal-team');
+            renderAll();
+            if (document.getElementById('modal-job-details').classList.contains('active')) openJobDetails(id);
+        }
+        function resetTeam(id) {
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            p.teamOverride = null;
+            if (state.teamAliases) delete state.teamAliases[normTeam(p.team)];
+            closeModal('modal-team');
+            renderAll();
+            if (document.getElementById('modal-job-details').classList.contains('active')) openJobDetails(id);
+        }
+
+
+        // ===== Editar dados de um pedido (inclusive já pronto ou com falha) =====
+        // Devolve material ao estoque de um grupo (recria o rolo se ele já tinha acabado)
+        function refundToGroup(groupKey, amount) {
+            if (!groupKey || !amount) return;
+            const spools = state.filaments.filter(f => getFilamentGroupKey(f) === groupKey).sort((a, b) => (b.max - b.weight) - (a.max - a.weight));
+            if (spools.length) { spools[0].weight += amount; spools[0].max = Math.max(spools[0].max, spools[0].weight); return; }
+            const [brand, color, owner, colorCss] = groupKey.split('|');
+            state.filaments.push({ id: 'f' + Date.now(), brand, color, owner, colorCss, weight: amount, max: amount });
+        }
+        function openEditJob(id) {
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            const $ = i => document.getElementById(i);
+            const isFailed = p.status === 'failed' && p.failedLogs && p.failedLogs.length;
+            const log = isFailed ? p.failedLogs[p.failedLogs.length - 1] : null;
+            $('edit-id').value = id;
+            $('edit-failed-note').classList.toggle('hidden', !isFailed);
+            $('edit-name').value = p.name || '';
+            $('edit-email').value = p.email || '';
+            $('edit-printer').value = (log ? log.printer : p.printer) || '';
+            $('edit-date').value = p.date || '';
+            $('edit-time').value = p.time || '';
+            $('edit-duration').value = (log ? log.duration : p.duration) ?? '';
+            populateFilamentDropdown('edit-filament');
+            const sel = $('edit-filament'), grp = log ? log.group : p.filamentGroup;
+            sel.insertAdjacentHTML('afterbegin', `<option value="">—</option>`);
+            if (grp && ![...sel.options].some(o => o.value === grp)) {
+                const [b, c, o] = grp.split('|');
+                sel.insertAdjacentHTML('beforeend', `<option value="${esc(grp)}">${esc(b)} (${esc(c)}) - ${esc(ownerLabel(o))} ${T('[sem estoque]')}</option>`);
+            }
+            sel.value = grp || '';
+            $('edit-usage').value = (log ? log.usage : p.filamentUsage) ?? '';
+            const counted = isFailed || (p.status === 'done' && p.deducted);
+            $('edit-stock-note').innerText = counted
+                ? T('O material já foi descontado do estoque. Ao salvar, o painel devolve a quantidade antiga e desconta a nova automaticamente.')
+                : T('O material só é descontado do estoque quando o pedido vai para "Prontos".');
+            openModal('modal-edit-job');
+        }
+        function saveEditJob() {
+            const $ = i => document.getElementById(i);
+            const p = state.projects.find(x => x.id === $('edit-id').value); if (!p) return;
+            const name = $('edit-name').value.trim();
+            if (!name) return alert(T('O nome do projeto é obrigatório.'));
+            const printer = $('edit-printer').value || null;
+            const date = $('edit-date').value || null, time = $('edit-time').value || null;
+            const durRaw = $('edit-duration').value, useRaw = $('edit-usage').value;
+            const duration = durRaw === '' ? null : Math.max(0, parseFloat(durRaw));
+            const usage = useRaw === '' ? null : Math.max(0, parseInt(useRaw));
+            const group = $('edit-filament').value || null;
+            if ((usage && !group) || (group && !usage)) return alert(T('Escolha o material e a quantidade juntos.'));
+
+            const isFailed = p.status === 'failed' && p.failedLogs && p.failedLogs.length;
+            let msg = '';
+            if (isFailed) {
+                const log = p.failedLogs[p.failedLogs.length - 1];
+                if (log.group !== group || log.usage !== usage) {
+                    refundToGroup(log.group, log.usage || 0);
+                    const short = group && usage ? deductFilamentFromGroup(group, usage) : 0;
+                    if (short > 0) msg = T('Atenção: faltou registrar {0} g/ml no estoque.', short);
+                }
+                Object.assign(log, { printer, duration, usage, group });
+            } else if (p.status === 'done' && p.deducted) {
+                if (p.filamentGroup !== group || p.filamentUsage !== usage) {
+                    refundToGroup(p.filamentGroup, p.filamentUsage || 0);
+                    const short = group && usage ? deductFilamentFromGroup(group, usage) : 0;
+                    if (short > 0) msg = T('Atenção: faltou registrar {0} g/ml no estoque.', short);
+                }
+            }
+            Object.assign(p, { name, email: $('edit-email').value.trim(), printer, date, time, duration, filamentGroup: group, filamentUsage: usage });
+            p.editedAt = nowBR();
+            closeModal('modal-edit-job');
+            renderAll();
+            if ($('modal-job-details').classList.contains('active')) openJobDetails(p.id);
+            if (msg) alert(msg);
         }
 
         // Abre a janela "Registrar impressão com falha" para o pedido
@@ -1156,7 +1690,7 @@
             const filGroup = document.getElementById('sched-filament').value;
             const filUsage = parseInt(document.getElementById('sched-usage').value);
 
-            if (!dateStr || !startTimeStr || !duration || !filUsage) return alert("Preencha todos os campos.");
+            if (!dateStr || !startTimeStr || !duration || !filUsage) return alert(T('Preencha todos os campos.'));
 
             const [sh, sm] = startTimeStr.split(':').map(Number);
             const startMins = sh * 60 + sm; const endMins = startMins + (duration * 60);
@@ -1169,7 +1703,7 @@
                 }
                 return false;
             });
-            if (conflict) return alert(`CONFLITO: a ${printer} já está ocupada nesse horário.`);
+            if (conflict) return alert(T('CONFLITO: a {0} já está ocupada nesse horário.', printer));
 
             const proj = state.projects.find(p => p.id === id);
             if (proj.status === 'failed') proj.deducted = false;
@@ -1189,13 +1723,13 @@
             const filGroup = document.getElementById('failed-filament').value;
             const filUsage = parseInt(document.getElementById('failed-usage').value);
 
-            if (!duration || !filUsage) return alert("Preencha todos os campos.");
+            if (!duration || !filUsage) return alert(T('Preencha todos os campos.'));
 
             const proj = state.projects.find(p => p.id === id);
 
             if (filGroup && filUsage) {
                 const shortage = deductFilamentFromGroup(filGroup, filUsage);
-                if (shortage > 0) alert(`Atenção: faltou registrar ${shortage} g/ml no estoque.`);
+                if (shortage > 0) alert(T('Atenção: faltou registrar {0} g/ml no estoque.', shortage));
             }
 
             proj.failedLogs = proj.failedLogs || [];
@@ -1272,22 +1806,22 @@
                     totalPrintJobs++;
                     const dur = p.duration || 0;
                     totalMachineHours += dur;
-                    if (dur) teamHours[p.team] = (teamHours[p.team] || 0) + dur;
+                    if (dur) teamHours[teamOf(p)] = (teamHours[teamOf(p)] || 0) + dur;
                     if (dur && p.printer) printerHours[p.printer] = (printerHours[p.printer] || 0) + dur;
 
-                    teamPrints[p.team] = (teamPrints[p.team] || 0) + 1;
-                    userCategories[getUserCategory(p.team)]++;
+                    teamPrints[teamOf(p)] = (teamPrints[teamOf(p)] || 0) + 1;
+                    userCategories[getUserCategory(teamOf(p))]++;
 
                     if (p.filamentGroup && p.filamentUsage) {
                         const matName = p.filamentGroup.split('|')[0];
                         const owner = p.filamentGroup.split('|')[2];
                         if (owner === 'House') {
                             houseMat[matName] = (houseMat[matName] || 0) + p.filamentUsage;
-                            teamHouseMaterial[p.team] = (teamHouseMaterial[p.team] || 0) + p.filamentUsage;
+                            teamHouseMaterial[teamOf(p)] = (teamHouseMaterial[teamOf(p)] || 0) + p.filamentUsage;
                         } else {
                             teamMat[matName] = (teamMat[matName] || 0) + p.filamentUsage;
                         }
-                        teamMaterial[p.team] = (teamMaterial[p.team] || 0) + p.filamentUsage;
+                        teamMaterial[teamOf(p)] = (teamMaterial[teamOf(p)] || 0) + p.filamentUsage;
                     }
                 }
 
@@ -1296,7 +1830,7 @@
                         if (!inRange(log.date || p.date)) return;
                         failedCount++;
                         totalMachineHours += log.duration;
-                        teamHours[p.team] = (teamHours[p.team] || 0) + log.duration;
+                        teamHours[teamOf(p)] = (teamHours[teamOf(p)] || 0) + log.duration;
                         if (log.printer) printerHours[log.printer] = (printerHours[log.printer] || 0) + log.duration;
 
                         if (log.group && log.usage) {
@@ -1304,11 +1838,11 @@
                             const owner = log.group.split('|')[2];
                             if (owner === 'House') {
                                 houseMat[matName] = (houseMat[matName] || 0) + log.usage;
-                                teamHouseMaterial[p.team] = (teamHouseMaterial[p.team] || 0) + log.usage;
+                                teamHouseMaterial[teamOf(p)] = (teamHouseMaterial[teamOf(p)] || 0) + log.usage;
                             } else {
                                 teamMat[matName] = (teamMat[matName] || 0) + log.usage;
                             }
-                            teamMaterial[p.team] = (teamMaterial[p.team] || 0) + log.usage;
+                            teamMaterial[teamOf(p)] = (teamMaterial[teamOf(p)] || 0) + log.usage;
                         }
                     });
                 }
@@ -1317,18 +1851,18 @@
             document.getElementById('stat-hours').innerText = (Math.round(totalMachineHours * 10) / 10) + ' h';
             document.getElementById('stat-projects').innerText = totalPrintJobs;
 
-            const periodo = (!anStart && !anEnd) ? 'Todo o período'
-                : (anStart && anEnd) ? `De ${fmtBR(anStart)} a ${fmtBR(anEnd)}`
-                : anStart ? `A partir de ${fmtBR(anStart)}` : `Até ${fmtBR(anEnd)}`;
+            const periodo = (!anStart && !anEnd) ? T('Todo o período')
+                : (anStart && anEnd) ? T('De {0} a {1}', fmtBR(anStart), fmtBR(anEnd))
+                : anStart ? T('A partir de {0}', fmtBR(anStart)) : T('Até {0}', fmtBR(anEnd));
             document.getElementById('an-label').innerHTML =
-                `<strong>${periodo}</strong> · ${totalPrintJobs} impressão(ões) · ${failedCount} falha(s) · ${Math.round(totalMachineHours * 10) / 10} h de máquina` +
-                ((anStart || anEnd) ? ' <span class="text-xs text-gray-400">(pela data agendada da impressão; o CSV também segue este período)</span>' : '');
+                `<strong>${periodo}</strong> · ${T('{0} impressão(ões) · {1} falha(s) · {2} h de máquina', totalPrintJobs, failedCount, Math.round(totalMachineHours * 10) / 10)}` +
+                ((anStart || anEnd) ? ` <span class="text-xs text-gray-400">${T('(pela data agendada da impressão; o CSV também segue este período)')}</span>` : '');
 
             const drawChart = (id, type, dataObj, label, bgColors) => {
                 const ctx = document.getElementById(id).getContext('2d');
                 if (charts[id]) charts[id].destroy();
 
-                const labels = Object.keys(dataObj).length ? Object.keys(dataObj) : ['Sem dados'];
+                const labels = Object.keys(dataObj).length ? Object.keys(dataObj) : [T('Sem dados')];
                 const data = Object.keys(dataObj).length ? Object.values(dataObj) : [0];
 
                 const options = {
@@ -1362,23 +1896,23 @@
 
             const colorsPie = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'];
 
-            drawChart('chart-hours-team', 'bar', teamHours, 'Horas de impressão');
-            drawChart('chart-hours-printer', 'bar', printerHours, 'Horas por impressora', isDark ? '#34d399' : '#10b981');
-            drawChart('chart-material-team', 'bar', teamMaterial, 'Material usado (g/ml)', isDark ? '#f472b6' : '#ec4899');
-            drawChart('chart-house-material-team', 'bar', teamHouseMaterial, 'Material da casa (g/ml)', isDark ? '#f87171' : '#ef4444');
-            drawChart('chart-prints-team', 'doughnut', teamPrints, 'Impressões', colorsPie);
+            drawChart('chart-hours-team', 'bar', teamHours, T('Horas de impressão'));
+            drawChart('chart-hours-printer', 'bar', printerHours, T('Horas por impressora'), isDark ? '#34d399' : '#10b981');
+            drawChart('chart-material-team', 'bar', teamMaterial, T('Material usado (g/ml)'), isDark ? '#f472b6' : '#ec4899');
+            drawChart('chart-house-material-team', 'bar', teamHouseMaterial, T('Material da casa (g/ml)'), isDark ? '#f87171' : '#ef4444');
+            drawChart('chart-prints-team', 'doughnut', teamPrints, T('Impressões'), colorsPie);
 
             const activeCats = {};
-            for (let key in userCategories) if (userCategories[key] > 0) activeCats[CAT_PT[key]] = userCategories[key];
-            drawChart('chart-uses-category', 'pie', activeCats, 'Categoria', ['#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6']);
+            for (let key in userCategories) if (userCategories[key] > 0) activeCats[T(CAT_PT[key])] = userCategories[key];
+            drawChart('chart-uses-category', 'pie', activeCats, T('Categoria'), ['#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6']);
 
-            drawChart('chart-house-mat', 'bar', houseMat, 'Uso (g/ml)', isDark ? '#fbbf24' : '#f59e0b');
-            drawChart('chart-team-mat', 'bar', teamMat, 'Uso (g/ml)', isDark ? '#a78bfa' : '#8b5cf6');
+            drawChart('chart-house-mat', 'bar', houseMat, T('Uso (g/ml)'), isDark ? '#fbbf24' : '#f59e0b');
+            drawChart('chart-team-mat', 'bar', teamMat, T('Uso (g/ml)'), isDark ? '#a78bfa' : '#8b5cf6');
         }
 
         function downloadCSV() {
             const selectedPrinter = document.getElementById('export-printer').value;
-            const rows = [['Data', 'Hora', 'Status', 'Impressora', 'Projeto', 'Equipe/Pessoa', 'E-mail', 'Duração (h)', 'Material', 'Quantidade (g/ml)', 'E-mail de pronto enviado']];
+            const rows = [['Data', 'Hora', 'Status', 'Impressora', 'Projeto', 'Equipe/Pessoa', 'E-mail', 'Duração (h)', 'Material', 'Quantidade (g/ml)', 'E-mail de pronto enviado'].map(h => T(h))];
             const escapeCSV = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
 
             state.projects.forEach(p => {
@@ -1387,8 +1921,8 @@
                         if ((selectedPrinter === 'ALL' || log.printer === selectedPrinter) && inRange(log.date || p.date)) {
                             const matName = log.group ? log.group.split('|')[0] : '—';
                             rows.push([
-                                escapeCSV(fmtBR(log.date || p.date)), escapeCSV(p.time), escapeCSV('FALHOU'), escapeCSV(log.printer),
-                                escapeCSV(`${p.name} (falha #${index + 1})`), escapeCSV(p.team), escapeCSV(p.email),
+                                escapeCSV(fmtBR(log.date || p.date)), escapeCSV(p.time), escapeCSV(T('FALHOU')), escapeCSV(log.printer),
+                                escapeCSV(`${p.name} ${T('(falha #{0})', index + 1)}`), escapeCSV(teamOf(p)), escapeCSV(p.email),
                                 escapeCSV(log.duration), escapeCSV(matName), escapeCSV(log.usage), escapeCSV('')
                             ]);
                         }
@@ -1399,8 +1933,8 @@
                     if ((selectedPrinter === 'ALL' || p.printer === selectedPrinter) && inRange(p.date)) {
                         const matName = p.filamentGroup ? p.filamentGroup.split('|')[0] : '—';
                         rows.push([
-                            escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV((STATUS_PT[p.status] || p.status).toUpperCase()), escapeCSV(p.printer),
-                            escapeCSV(p.name), escapeCSV(p.team), escapeCSV(p.email),
+                            escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV(T(STATUS_PT[p.status] || p.status).toUpperCase()), escapeCSV(p.printer),
+                            escapeCSV(p.name), escapeCSV(teamOf(p)), escapeCSV(p.email),
                             escapeCSV(p.duration), escapeCSV(matName), escapeCSV(p.filamentUsage), escapeCSV(p.emailSentAt || '')
                         ]);
                     }
@@ -1408,7 +1942,7 @@
             });
 
             if (rows.length === 1) {
-                alert("Nenhum registro de impressão para esta máquina no período escolhido.");
+                alert(T('Nenhum registro de impressão para esta máquina no período escolhido.'));
                 return;
             }
 
@@ -1416,7 +1950,7 @@
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = `Registros_${selectedPrinter === 'ALL' ? 'Todas' : selectedPrinter.replace(/\s+/g, '_')}_${formatYMD(new Date())}.csv`;
+            link.download = `${T('Registros')}_${selectedPrinter === 'ALL' ? T('Todas') : selectedPrinter.replace(/\s+/g, '_')}_${formatYMD(new Date())}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
