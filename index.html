@@ -163,12 +163,33 @@
 
         <!-- 4. ANALÍTICOS -->
         <div id="view-analytics" class="view-section flex-1 flex-col p-6 overflow-y-auto bg-gray-50 dark:bg-gray-900 min-h-0">
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold dark:text-white">Analíticos da farm</h2>
                 <button onclick="openModal('modal-export')" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     Exportar registros (CSV)
                 </button>
+            </div>
+
+            <!-- Filtro de período -->
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm p-4 mb-6 flex flex-wrap items-end gap-4">
+                <div>
+                    <label for="an-start" class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data de início</label>
+                    <input type="date" id="an-start" class="mt-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm">
+                </div>
+                <div>
+                    <label for="an-end" class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data de fim</label>
+                    <input type="date" id="an-end" class="mt-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="setRange('7d')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Últimos 7 dias</button>
+                    <button onclick="setRange('30d')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Últimos 30 dias</button>
+                    <button onclick="setRange('mes')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Este mês</button>
+                    <button onclick="setRange('mesant')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Mês passado</button>
+                    <button onclick="setRange('ano')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Este ano</button>
+                    <button onclick="setRange('tudo')" class="text-xs bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-3 py-2 rounded font-medium">Todo o período</button>
+                </div>
+                <p id="an-label" class="text-sm text-gray-600 dark:text-gray-300 w-full"></p>
             </div>
 
             <div class="grid grid-cols-3 gap-6 mb-8">
@@ -577,6 +598,10 @@
 
         async function init() {
             updateThemeIcon();
+            document.getElementById('an-start').value = anStart;
+            document.getElementById('an-end').value = anEnd;
+            document.getElementById('an-start').addEventListener('change', e => applyRange(e.target.value, anEnd));
+            document.getElementById('an-end').addEventListener('change', e => applyRange(anStart, e.target.value));
             setupNavigation();
             loadLocalState();
             await fetchData();
@@ -1165,7 +1190,7 @@
             }
 
             proj.failedLogs = proj.failedLogs || [];
-            proj.failedLogs.push({ printer, duration, usage: filUsage, group: filGroup });
+            proj.failedLogs.push({ printer, duration, usage: filUsage, group: filGroup, date: formatYMD(new Date()) });
 
             proj.printer = printer;
             proj.duration = duration;
@@ -1187,6 +1212,39 @@
             return 'Teams';
         }
 
+        // ===== Filtro de período dos analíticos (datas em AAAA-MM-DD) =====
+        let anStart = '', anEnd = '';
+        try { const r = JSON.parse(localStorage.getItem('slim3d_an_range') || '{}'); anStart = r.start || ''; anEnd = r.end || ''; } catch (e) {}
+
+        // Sem filtro: conta tudo. Com filtro: só o que tem data dentro do intervalo.
+        function inRange(d) {
+            if (!anStart && !anEnd) return true;
+            if (!d) return false;
+            if (anStart && d < anStart) return false;
+            if (anEnd && d > anEnd) return false;
+            return true;
+        }
+
+        function applyRange(start, end) {
+            if (start && end && start > end) [start, end] = [end, start];
+            anStart = start || ''; anEnd = end || '';
+            document.getElementById('an-start').value = anStart;
+            document.getElementById('an-end').value = anEnd;
+            try { localStorage.setItem('slim3d_an_range', JSON.stringify({ start: anStart, end: anEnd })); } catch (e) {}
+            renderAnalytics();
+        }
+
+        function setRange(kind) {
+            const t = new Date(); t.setHours(0, 0, 0, 0);
+            const back = n => { const d = new Date(t); d.setDate(d.getDate() - n); return formatYMD(d); };
+            if (kind === '7d') applyRange(back(6), formatYMD(t));
+            else if (kind === '30d') applyRange(back(29), formatYMD(t));
+            else if (kind === 'mes') applyRange(formatYMD(new Date(t.getFullYear(), t.getMonth(), 1)), formatYMD(new Date(t.getFullYear(), t.getMonth() + 1, 0)));
+            else if (kind === 'mesant') applyRange(formatYMD(new Date(t.getFullYear(), t.getMonth() - 1, 1)), formatYMD(new Date(t.getFullYear(), t.getMonth(), 0)));
+            else if (kind === 'ano') applyRange(`${t.getFullYear()}-01-01`, `${t.getFullYear()}-12-31`);
+            else applyRange('', '');
+        }
+
         function renderAnalytics() {
             const isDark = document.documentElement.classList.contains('dark');
             Chart.defaults.color = isDark ? '#9ca3af' : '#64748b';
@@ -1194,13 +1252,14 @@
 
             let totalMachineHours = 0;
             let totalPrintJobs = 0;
+            let failedCount = 0;
 
             const teamHours = {}, printerHours = {}, teamPrints = {}, teamMaterial = {}, teamHouseMaterial = {};
             const userCategories = { 'Internal': 0, 'Teams': 0, 'Affiliated Fablab': 0, 'Partners': 0 };
             const houseMat = {}, teamMat = {};
 
             state.projects.forEach(p => {
-                if (p.status === 'scheduled' || p.status === 'done') {
+                if ((p.status === 'scheduled' || p.status === 'done') && inRange(p.date)) {
                     totalPrintJobs++;
                     const dur = p.duration || 0;
                     totalMachineHours += dur;
@@ -1225,6 +1284,8 @@
 
                 if (p.failedLogs) {
                     p.failedLogs.forEach(log => {
+                        if (!inRange(log.date || p.date)) return;
+                        failedCount++;
                         totalMachineHours += log.duration;
                         teamHours[p.team] = (teamHours[p.team] || 0) + log.duration;
                         if (log.printer) printerHours[log.printer] = (printerHours[log.printer] || 0) + log.duration;
@@ -1244,8 +1305,15 @@
                 }
             });
 
-            document.getElementById('stat-hours').innerText = totalMachineHours + ' h';
+            document.getElementById('stat-hours').innerText = (Math.round(totalMachineHours * 10) / 10) + ' h';
             document.getElementById('stat-projects').innerText = totalPrintJobs;
+
+            const periodo = (!anStart && !anEnd) ? 'Todo o período'
+                : (anStart && anEnd) ? `De ${fmtBR(anStart)} a ${fmtBR(anEnd)}`
+                : anStart ? `A partir de ${fmtBR(anStart)}` : `Até ${fmtBR(anEnd)}`;
+            document.getElementById('an-label').innerHTML =
+                `<strong>${periodo}</strong> · ${totalPrintJobs} impressão(ões) · ${failedCount} falha(s) · ${Math.round(totalMachineHours * 10) / 10} h de máquina` +
+                ((anStart || anEnd) ? ' <span class="text-xs text-gray-400">(pela data agendada da impressão; o CSV também segue este período)</span>' : '');
 
             const drawChart = (id, type, dataObj, label, bgColors) => {
                 const ctx = document.getElementById(id).getContext('2d');
@@ -1307,10 +1375,10 @@
             state.projects.forEach(p => {
                 if (p.failedLogs && p.failedLogs.length > 0) {
                     p.failedLogs.forEach((log, index) => {
-                        if (selectedPrinter === 'ALL' || log.printer === selectedPrinter) {
+                        if ((selectedPrinter === 'ALL' || log.printer === selectedPrinter) && inRange(log.date || p.date)) {
                             const matName = log.group ? log.group.split('|')[0] : '—';
                             rows.push([
-                                escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV('FALHOU'), escapeCSV(log.printer),
+                                escapeCSV(fmtBR(log.date || p.date)), escapeCSV(p.time), escapeCSV('FALHOU'), escapeCSV(log.printer),
                                 escapeCSV(`${p.name} (falha #${index + 1})`), escapeCSV(p.team), escapeCSV(p.email),
                                 escapeCSV(log.duration), escapeCSV(matName), escapeCSV(log.usage), escapeCSV('')
                             ]);
@@ -1319,7 +1387,7 @@
                 }
 
                 if ((p.status === 'done' || p.status === 'scheduled') && p.printer) {
-                    if (selectedPrinter === 'ALL' || p.printer === selectedPrinter) {
+                    if ((selectedPrinter === 'ALL' || p.printer === selectedPrinter) && inRange(p.date)) {
                         const matName = p.filamentGroup ? p.filamentGroup.split('|')[0] : '—';
                         rows.push([
                             escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV((STATUS_PT[p.status] || p.status).toUpperCase()), escapeCSV(p.printer),
@@ -1331,7 +1399,7 @@
             });
 
             if (rows.length === 1) {
-                alert("Nenhum registro de impressão para esta máquina.");
+                alert("Nenhum registro de impressão para esta máquina no período escolhido.");
                 return;
             }
 
