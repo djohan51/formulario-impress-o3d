@@ -1,0 +1,2235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin | Slim3D Print Farm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class', theme: { extend: {} } }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="text/javascript">
+       (function(){ emailjs.init({ publicKey: "TOPXKRHO2PikidTEd" }); })();
+    </script>
+    <style>
+        .view-section { display: none; }
+        .view-section.active { display: flex; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .drag-over { background-color: #e5e7eb !important; border: 2px dashed #9ca3af !important; }
+        .dark .drag-over { background-color: #374151 !important; border-color: #6b7280 !important; }
+
+        .dragging { opacity: 0.5; transform: scale(0.95); cursor: grabbing !important; }
+        .kanban-card { cursor: grab; }
+        .kanban-card:active { cursor: grabbing; }
+
+        .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+        .dark .custom-scroll::-webkit-scrollbar-thumb { background: #4b5563; border: 2px solid transparent; background-clip: padding-box; }
+
+        .modal { display: none; }
+        .modal.active { display: flex; animation: fadeIn 0.2s ease-in-out; }
+        .lang-btn { color: #4b5563; background: transparent; }
+        .dark .lang-btn { color: #d1d5db; }
+        .lang-btn[aria-pressed="true"] { background: #111827; color: #fff; }
+        .dark .lang-btn[aria-pressed="true"] { background: #f9fafb; color: #111827; }
+    </style>
+    <script>
+        if (localStorage.getItem('slim3d_theme') === 'dark' || (!localStorage.getItem('slim3d_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans flex h-screen overflow-hidden transition-colors duration-200">
+
+    <!-- Barra lateral -->
+    <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col z-20 relative shadow-sm transition-colors duration-200">
+        <div class="p-6 border-b dark:border-gray-700">
+            <h2 class="text-xl font-bold dark:text-white">Slim3D Admin</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Fluxo de impressão e estoque</p>
+            <div class="mt-3 inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden text-xs font-semibold" role="group" aria-label="Idioma">
+                <button id="lang-pt" onclick="setLang('pt')" class="lang-btn flex items-center gap-1.5 px-2.5 py-1.5" title="Português"><svg viewBox="0 0 20 14" width="22" height="15" aria-hidden="true" style="border-radius:2px;flex:none"><rect width="20" height="14" fill="#009b3a"/><path d="M10 1.6 18.2 7 10 12.4 1.8 7z" fill="#fedf00"/><circle cx="10" cy="7" r="3.1" fill="#002776"/><path d="M7 6.4c2-.5 4.2-.2 6 .9" stroke="#fff" stroke-width=".6" fill="none"/></svg><span>PT</span></button>
+                <button id="lang-en" onclick="setLang('en')" class="lang-btn flex items-center gap-1.5 px-2.5 py-1.5 border-l border-gray-300 dark:border-gray-600" title="English"><svg viewBox="0 0 19 10" width="22" height="15" aria-hidden="true" style="border-radius:2px;flex:none" preserveAspectRatio="none"><rect width="19" height="10" fill="#fff"/><g fill="#b22234"><rect width="19" height=".77"/><rect y="1.54" width="19" height=".77"/><rect y="3.08" width="19" height=".77"/><rect y="4.62" width="19" height=".77"/><rect y="6.15" width="19" height=".77"/><rect y="7.69" width="19" height=".77"/><rect y="9.23" width="19" height=".77"/></g><rect width="7.6" height="5.38" fill="#3c3b6e"/></svg><span>EN</span></button>
+            </div>
+        </div>
+        <nav class="flex-1 p-4 space-y-2 text-sm font-medium" id="sidebar-nav">
+            <button data-target="view-kanban" class="nav-btn w-full text-left rounded p-2 transition">Quadro de pedidos</button>
+            <button data-target="view-calendar" class="nav-btn w-full text-left rounded p-2 transition">Agenda semanal</button>
+            <button data-target="view-stock" class="nav-btn w-full text-left rounded p-2 transition">Estoque de material</button>
+            <button data-target="view-analytics" class="nav-btn w-full text-left rounded p-2 transition">Analíticos</button>
+        </nav>
+        <div class="p-4 border-t dark:border-gray-700 text-center space-y-2">
+            <button onclick="toggleDarkMode()" class="text-xs bg-gray-800 dark:bg-gray-600 hover:bg-gray-700 dark:hover:bg-gray-500 text-white px-3 py-2 rounded w-full font-medium transition shadow-sm flex items-center justify-center gap-2">
+                <span id="theme-icon">🌙</span> <span id="theme-text">Modo escuro</span>
+            </button>
+            <button onclick="fetchData()" class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-2 rounded w-full font-medium transition shadow-sm">Buscar respostas do formulário ↻</button>
+            <button onclick="saveStateToFile()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded w-full font-medium transition shadow-sm">💾 Salvar backup</button>
+            <button onclick="triggerLoadState()" class="text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3 py-2 rounded w-full font-medium transition shadow-sm">📂 Carregar backup</button>
+            <input type="file" id="load-state-input" accept=".json" class="hidden" onchange="loadStateFromFile(event)">
+        </div>
+    </aside>
+
+    <!-- Conteúdo -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 relative z-10 transition-colors duration-200">
+
+        <!-- Status das impressoras -->
+        <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 shadow-sm z-0 transition-colors duration-200">
+            <div id="printer-status-header" class="flex gap-4 overflow-x-auto w-full custom-scroll pb-1"></div>
+        </header>
+
+        <!-- 1. QUADRO KANBAN -->
+        <div id="view-kanban" class="view-section active flex-1 flex-col overflow-hidden min-h-0">
+            <div class="p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center px-6 transition-colors duration-200">
+                <input type="text" id="kanban-search" oninput="renderKanban()" placeholder="🔍 Buscar projeto, equipe, e-mail..." class="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-xs w-72 bg-gray-50 dark:bg-gray-700 dark:text-white focus:bg-white dark:focus:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-gray-900 dark:focus:ring-gray-400">
+                <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Arraste os cards para mudar o status ou agendar · clique para ver detalhes</p>
+            </div>
+
+            <div class="flex-1 overflow-x-auto p-6 gap-6 flex">
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-gray-700 dark:text-gray-300 flex justify-between items-center text-sm">
+                        <span>1. Recebidos <span id="count-inbox" class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 rounded-full text-xs py-0.5 ml-1">0</span></span>
+                        <button onclick="openModal('modal-add-job')" class="text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-white px-2 py-1 rounded shadow-sm">+ Adicionar</button>
+                    </h3>
+                    <div class="drop-zone flex-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-lg border border-gray-200 dark:border-gray-700 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="inbox" id="col-inbox"></div>
+                </div>
+
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-gray-700 dark:text-gray-300 flex justify-between items-center text-sm">2. Agendados / Imprimindo <span id="count-scheduled" class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 rounded-full text-xs py-0.5">0</span></h3>
+                    <div class="drop-zone flex-1 bg-gray-100/80 dark:bg-gray-800/80 rounded-lg border border-gray-200 dark:border-gray-700 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="scheduled" id="col-scheduled"></div>
+                </div>
+
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-green-700 dark:text-green-400 flex justify-between items-center text-sm">3. Prontos <span id="count-done" class="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 px-2 rounded-full text-xs py-0.5">0</span></h3>
+                    <div class="drop-zone flex-1 bg-green-50/50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="done" id="col-done"></div>
+                </div>
+
+                <div class="w-[280px] flex-shrink-0 flex flex-col">
+                    <h3 class="font-bold mb-3 text-red-700 dark:text-red-400 flex justify-between items-center text-sm">4. Falharam <span id="count-failed" class="bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300 px-2 rounded-full text-xs py-0.5">0</span></h3>
+                    <div class="drop-zone flex-1 bg-red-50/80 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-2 min-h-[200px] custom-scroll overflow-y-auto" data-column="failed" id="col-failed"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. AGENDA SEMANAL -->
+        <div id="view-calendar" class="view-section flex-1 flex-col overflow-hidden bg-white dark:bg-gray-800 transition-colors duration-200 min-h-0">
+            <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-lg font-bold dark:text-white">Agenda das máquinas</h2>
+                    <div class="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 border border-gray-200 dark:border-gray-600">
+                        <button onclick="changeWeek(-1)" class="px-2 py-1 bg-white dark:bg-gray-600 dark:text-white rounded shadow-sm text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-500">&lt;</button>
+                        <button onclick="resetWeek()" class="px-2 py-1 bg-white dark:bg-gray-600 dark:text-white rounded shadow-sm text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-500 text-gray-700">Hoje</button>
+                        <span id="week-label" class="text-sm font-medium px-2 text-gray-700 dark:text-gray-200 w-48 text-center">...</span>
+                        <button onclick="changeWeek(1)" class="px-2 py-1 bg-white dark:bg-gray-600 dark:text-white rounded shadow-sm text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-500">&gt;</button>
+                    </div>
+                </div>
+                <div class="flex gap-2 flex-wrap justify-end">
+                    <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs rounded font-medium">Hi Combo</span>
+                    <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded font-medium">K2 Combo</span>
+                    <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs rounded font-medium">K2 Plus</span>
+                    <span class="px-2 py-1 bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-xs rounded font-medium">Ender 5 Max</span>
+                    <span class="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 text-xs rounded font-medium">Sparkx I7</span>
+                    <span class="px-2 py-1 bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 text-xs rounded font-medium">Halot X1</span>
+                    <span class="px-2 py-1 bg-teal-100 dark:bg-teal-900 text-teal-800 dark:text-teal-200 text-xs rounded font-medium">Saturn 2</span>
+                    <span class="px-2 py-1 bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 text-xs rounded font-medium">Photon Mono</span>
+                </div>
+            </div>
+            <div id="calendar-header" class="flex border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 text-center"></div>
+            <div class="flex-1 overflow-y-auto custom-scroll relative" id="calendar-grid"></div>
+        </div>
+
+        <!-- 3. ESTOQUE -->
+        <div id="view-stock" class="view-section flex-1 flex-col p-6 overflow-y-auto min-h-0">
+            <div class="flex justify-between items-end mb-6">
+                <h2 class="text-2xl font-bold dark:text-white">Estoque de material</h2>
+                <button onclick="openModal('modal-add-spool')" class="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-4 py-2 rounded text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-200">+ Cadastrar material</button>
+            </div>
+            <h3 class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">🏠 Slim3D / Creality (estoque da casa)</h3>
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-x-auto mb-8">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider text-left">
+                        <tr><th class="px-4 py-3">Material e marca</th><th class="px-4 py-3">Cor</th><th class="px-4 py-3">Unidades/rolos</th><th class="px-4 py-3">Restante (g/ml)</th><th class="px-4 py-3 text-right">Ação</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 dark:text-gray-200" id="stock-house-body"></tbody>
+                </table>
+            </div>
+            <h3 class="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">👥 Material das equipes</h3>
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 dark:text-gray-300 uppercase tracking-wider text-left">
+                        <tr><th class="px-4 py-3">Material e marca</th><th class="px-4 py-3">Equipe</th><th class="px-4 py-3">Cor</th><th class="px-4 py-3">Unidades/rolos</th><th class="px-4 py-3">Restante (g/ml)</th><th class="px-4 py-3 text-right">Ação</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700 dark:text-gray-200" id="stock-team-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 4. ANALÍTICOS -->
+        <div id="view-analytics" class="view-section flex-1 flex-col p-6 overflow-y-auto bg-gray-50 dark:bg-gray-900 min-h-0">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold dark:text-white">Analíticos da farm</h2>
+                <div class="flex flex-wrap gap-2 justify-end">
+                    <button onclick="openModal('modal-export')" class="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-600 shadow-sm">
+                        Exportar registros (CSV)
+                    </button>
+                    <button onclick="openReport()" class="bg-green-700 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-800 shadow-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Exportar trabalhos concluídos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filtro de período -->
+            <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm p-4 mb-6 flex flex-wrap items-end gap-4">
+                <div>
+                    <label for="an-start" class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data de início</label>
+                    <input type="date" id="an-start" class="mt-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm">
+                </div>
+                <div>
+                    <label for="an-end" class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data de fim</label>
+                    <input type="date" id="an-end" class="mt-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="setRange('7d')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Últimos 7 dias</button>
+                    <button onclick="setRange('30d')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Últimos 30 dias</button>
+                    <button onclick="setRange('mes')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Este mês</button>
+                    <button onclick="setRange('mesant')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Mês passado</button>
+                    <button onclick="setRange('ano')" class="text-xs border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200 px-3 py-2 rounded font-medium">Este ano</button>
+                    <button onclick="setRange('tudo')" class="text-xs bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-3 py-2 rounded font-medium">Todo o período</button>
+                </div>
+                <p id="an-label" class="text-sm text-gray-600 dark:text-gray-300 w-full"></p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-6 mb-8">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Horas de máquina</p><p class="text-3xl font-bold mt-2 dark:text-white" id="stat-hours">0 h</p></div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Total de impressões</p><p class="text-3xl font-bold mt-2 dark:text-white" id="stat-projects">0</p></div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"><p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Unidades de material</p><p class="text-3xl font-bold mt-2 dark:text-white" id="stat-spools">0</p></div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full max-w-7xl">
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Horas de impressão por equipe</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-hours-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Horas por impressora</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-hours-printer"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Material total usado por equipe (g/ml)</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-material-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Material da casa usado por equipe (g/ml)</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-house-material-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Impressões por equipe (%)</h3>
+                    <div class="relative h-48 w-full flex justify-center"><canvas id="chart-prints-team"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Categorias de uso (%)</h3>
+                    <div class="relative h-48 w-full flex justify-center"><canvas id="chart-uses-category"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Materiais da casa mais usados</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-house-mat"></canvas></div>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                    <h3 class="font-bold text-gray-700 dark:text-gray-300 mb-4 text-center">Materiais das equipes mais usados</h3>
+                    <div class="relative h-48 w-full"><canvas id="chart-team-mat"></canvas></div>
+                </div>
+            </div>
+            <div class="h-12 w-full"></div>
+        </div>
+    </main>
+
+    <!-- JANELAS -->
+
+    <!-- Exportar CSV -->
+    <div id="modal-export" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[400px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Exportar registros (CSV)</div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Baixe uma planilha com todas as impressões agendadas, prontas e que falharam.</p>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Filtrar por impressora</label>
+                    <select id="export-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 rounded p-2 bg-white dark:bg-gray-700 dark:text-white">
+                        <option value="ALL">Todas as impressoras</option>
+                        <optgroup label="FDM (filamento)">
+                            <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                            <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                            <option value="Sparkx I7">Sparkx I7</option>
+                        </optgroup>
+                        <optgroup label="SLA/DLP (resina)">
+                            <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                            <option value="Photon Mono">Photon Mono</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-export')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="downloadCSV()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Baixar CSV</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Relatório de trabalhos concluídos (Excel / Google Planilhas) -->
+    <div id="modal-report" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[540px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Exportar trabalhos concluídos</div>
+            <div class="p-6 space-y-4 text-sm dark:text-gray-300 overflow-y-auto custom-scroll">
+                <p class="text-gray-600 dark:text-gray-400">Planilha com os trabalhos de impressão concluídos (coluna "Prontos"), uma linha por trabalho. Usa o período escolhido no filtro de datas dos analíticos.</p>
+                <p id="report-period" class="font-medium dark:text-white"></p>
+                <div>
+                    <label for="report-printer" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Filtrar por impressora</label>
+                    <select id="report-printer" onchange="refreshReport()" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                        <option value="ALL">Todas as impressoras</option>
+                        <optgroup label="FDM (filamento)">
+                            <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                            <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                            <option value="Sparkx I7">Sparkx I7</option>
+                        </optgroup>
+                        <optgroup label="SLA/DLP (resina)">
+                            <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                            <option value="Photon Mono">Photon Mono</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <p id="report-cols" class="text-xs text-gray-500 dark:text-gray-400"></p>
+                <p id="report-count" class="font-semibold dark:text-white"></p>
+                <div id="report-warnings" class="hidden text-xs bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 text-yellow-900 dark:text-yellow-200 rounded p-3 space-y-1"></div>
+                <p id="report-gs-help" class="hidden text-xs bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-200 rounded p-3"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
+                <button onclick="closeModal('modal-report')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded mr-auto">Cancelar</button>
+                <button id="report-btn-google" onclick="exportReport('google')" class="px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 dark:text-white rounded hover:bg-gray-100 dark:hover:bg-gray-500 disabled:opacity-50">Google Planilhas</button>
+                <button id="report-btn-excel" onclick="exportReport('excel')" class="px-4 py-2 bg-green-700 text-white rounded hover:bg-green-800 disabled:opacity-50">⬇ Excel (.xlsx)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adicionar pedido manual -->
+    <div id="modal-add-job" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[400px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Adicionar pedido manual</div>
+            <div class="p-6 space-y-4">
+                <div><label class="block text-sm font-medium dark:text-gray-300">Nome do projeto</label><input type="text" id="add-job-name" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Equipe ou pessoa</label><input type="text" id="add-job-team" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" value="Admin"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Nome de quem enviou</label><input type="text" id="add-job-submitter" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">E-mail (para o aviso de pronto)</label><input type="email" id="add-job-email" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" placeholder="aluno@universidade.edu.br"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Telefone / WhatsApp</label><input type="tel" id="add-job-phone" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" placeholder="(47) 99999-9999"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Descrição</label><textarea id="add-job-desc" rows="3" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></textarea></div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-add-job')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveNewJob()" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Adicionar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detalhes do pedido -->
+    <div id="modal-job-details" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[480px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center gap-3"><h3 class="font-bold text-lg dark:text-white" id="job-det-name">Projeto</h3><span id="job-det-status" class="px-2 py-1 rounded text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Status</span></div>
+            <div class="p-6 space-y-4 text-sm dark:text-gray-300 overflow-y-auto custom-scroll">
+                <div class="grid grid-cols-1 gap-1">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1"><span class="font-semibold text-gray-700 dark:text-gray-400">Equipe:</span> <span id="job-det-team"></span> <button id="job-det-team-edit" class="text-xs border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 px-2 py-0.5 rounded font-medium">✎ Alterar empresa</button><span id="job-det-team-orig" class="text-xs text-gray-400 w-full"></span></div>
+                    <div id="job-det-submitter-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Enviado por:</span> <span id="job-det-submitter"></span></div>
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400">E-mail:</span> <span id="job-det-email" class="break-all"></span></div>
+                    <div id="job-det-phone-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Telefone:</span> <span id="job-det-phone"></span></div>
+                    <div id="job-det-material-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Material:</span> <span id="job-det-material"></span></div>
+                    <div id="job-det-own-row"><span class="font-semibold text-gray-700 dark:text-gray-400">Material próprio:</span> <span id="job-det-own"></span></div>
+                </div>
+
+                <div>
+                    <span class="font-semibold text-gray-700 dark:text-gray-400">Arquivos 3D:</span>
+                    <div id="job-det-files" class="mt-2 space-y-2"></div>
+                </div>
+
+                <div>
+                    <span class="font-semibold text-gray-700 dark:text-gray-400">Descrição:</span>
+                    <p id="job-det-desc" class="mt-2 text-gray-600 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded border border-yellow-200 dark:border-yellow-700/50 italic whitespace-pre-line max-h-32 overflow-y-auto"></p>
+                </div>
+                <div id="job-det-sched-info" class="hidden border-t dark:border-gray-700 pt-4 mt-4 grid grid-cols-2 gap-y-3 gap-x-4">
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Impressora</span> <span id="job-det-printer" class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-medium"></span></div>
+                    <div><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Horário agendado</span> <span id="job-det-time"></span></div>
+                    <div class="col-span-2"><span class="font-semibold text-gray-700 dark:text-gray-400 block mb-1">Material usado</span> <span id="job-det-fil" class="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-2 py-1 rounded font-medium border dark:border-blue-800"></span></div>
+                </div>
+                <p id="job-det-mailinfo" class="text-xs text-green-700 dark:text-green-400 hidden"></p>
+                <p id="job-det-edited" class="text-xs text-gray-400"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
+                <a id="job-det-whatsapp" href="#" target="_blank" rel="noopener" class="hidden px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">WhatsApp</a>
+                <button id="job-det-edit" class="px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 dark:text-white rounded hover:bg-gray-100 dark:hover:bg-gray-500 mr-auto">✎ Editar dados</button>
+                <button id="job-det-failed" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Falhou</button>
+                <button id="job-det-ready" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">Está pronto · enviar e-mail</button>
+                <button onclick="closeModal('modal-job-details')" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Alterar empresa / equipe -->
+    <div id="modal-team" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[480px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Alterar empresa / equipe</div>
+            <div class="p-6 space-y-4 text-sm dark:text-gray-300 overflow-y-auto custom-scroll">
+                <input type="hidden" id="team-project-id">
+                <p>Enviado no formulário: <strong id="team-orig" class="dark:text-white"></strong></p>
+                <div>
+                    <label for="team-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nome correto da empresa</label>
+                    <input type="text" id="team-input" list="team-datalist" autocomplete="off" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                    <datalist id="team-datalist"></datalist>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Nomes parecidos que já enviaram</p>
+                    <div id="team-similar" class="flex flex-wrap gap-2"></div>
+                </div>
+                <details>
+                    <summary class="cursor-pointer text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Todas as empresas</summary>
+                    <div id="team-all" class="flex flex-wrap gap-2 mt-2"></div>
+                </details>
+                <label class="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" id="team-all-check" checked class="mt-0.5">
+                    <span id="team-all-label"></span>
+                </label>
+                <p id="team-alias-info" class="text-xs text-gray-500 dark:text-gray-400"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex flex-wrap justify-end gap-2">
+                <button id="team-reset" class="px-4 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded mr-auto">Voltar ao nome enviado</button>
+                <button onclick="closeModal('modal-team')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveTeam()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Editar dados do pedido -->
+    <div id="modal-edit-job" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[480px] max-w-full max-h-full flex flex-col overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Editar dados do pedido</div>
+            <div class="p-6 space-y-4 overflow-y-auto custom-scroll">
+                <input type="hidden" id="edit-id">
+                <p id="edit-failed-note" class="hidden text-xs bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 p-2 rounded">Este pedido está em "Falharam": você está editando a última falha registrada.</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nome do projeto</label><input type="text" id="edit-name" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Nome de quem enviou</label><input type="text" id="edit-submitter" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">E-mail</label><input type="email" id="edit-email" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Telefone / WhatsApp</label><input type="tel" id="edit-phone" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Impressora</label>
+                        <select id="edit-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"><option value="">—</option>
+                            <optgroup label="FDM (filamento)">
+                                <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                                <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                                <option value="Sparkx I7">Sparkx I7</option>
+                            </optgroup>
+                            <optgroup label="SLA/DLP (resina)">
+                                <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                                <option value="Photon Mono">Photon Mono</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label><input type="date" id="edit-date" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Início</label><input type="time" id="edit-time" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Duração (horas)</label><input type="number" step="0.5" min="0" id="edit-duration" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material</label><select id="edit-filament" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm"></select></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantidade de material (g/ml)</label><input type="number" min="0" id="edit-usage" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material próprio</label>
+                        <select id="edit-own" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <option value="">Automático (pelo material usado)</option>
+                            <option value="sim">Sim</option>
+                            <option value="nao">Não</option>
+                        </select>
+                    </div>
+                </div>
+                <p id="edit-stock-note" class="text-xs text-gray-500 dark:text-gray-400"></p>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-edit-job')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveEditJob()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Salvar alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agendar e material -->
+    <div id="modal-schedule" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[450px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Agendar impressão e material</div>
+            <div class="p-6 space-y-4">
+                <input type="hidden" id="sched-project-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Impressora</label>
+                        <select id="sched-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <optgroup label="FDM (filamento)">
+                                <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                                <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                                <option value="Sparkx I7">Sparkx I7</option>
+                            </optgroup>
+                            <optgroup label="SLA/DLP (resina)">
+                                <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                                <option value="Photon Mono">Photon Mono</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label><input type="date" id="sched-date" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Início</label><input type="time" id="sched-time" value="08:00" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Duração estimada (horas)</label><input type="number" id="sched-duration" step="0.5" value="2.5" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                </div>
+                <div class="pt-4 mt-2 border-t border-gray-200 dark:border-gray-700">
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material</label><select id="sched-filament" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm"></select></div>
+                        <div class="col-span-1"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Uso (g/ml)</label><input type="number" id="sched-usage" value="50" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">* O material é descontado do estoque quando o pedido vai para "Prontos"</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="cancelSchedule()" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveSchedule()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registrar falha -->
+    <div id="modal-failed" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[450px] overflow-hidden border-t-4 border-red-500 dark:border-gray-700 dark:border-t-red-600">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg text-red-700 dark:text-red-400">Registrar impressão com falha</div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Isso desconta do estoque o material perdido e registra o tempo de máquina gasto.</p>
+                <input type="hidden" id="failed-project-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Impressora usada</label>
+                        <select id="failed-printer" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <optgroup label="FDM (filamento)">
+                                <option value="Hi Combo">Hi Combo</option><option value="K2 Combo">K2 Combo</option>
+                                <option value="K2 Plus">K2 Plus</option><option value="Ender 5 Max">Ender 5 Max</option>
+                                <option value="Sparkx I7">Sparkx I7</option>
+                            </optgroup>
+                            <optgroup label="SLA/DLP (resina)">
+                                <option value="Halot X1">Halot X1</option><option value="Saturn 2">Saturn 2</option>
+                                <option value="Photon Mono">Photon Mono</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Material perdido</label><select id="failed-filament" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2 text-sm"></select></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tempo perdido (horas)</label><input type="number" id="failed-duration" step="0.5" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                    <div><label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Quantidade perdida (g/ml)</label><input type="number" id="failed-usage" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2" required></div>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-failed')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveFailed()" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">Registrar falha</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cadastrar material -->
+    <div id="modal-add-spool" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[400px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Cadastrar material</div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium dark:text-gray-300">Tipo de material</label>
+                        <select id="spool-type" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <optgroup label="FDM padrão">
+                                <option value="PLA">PLA</option><option value="PETG">PETG</option><option value="TPU">TPU</option>
+                                <option value="ABS">ABS</option><option value="ASA">ASA</option>
+                            </optgroup>
+                            <optgroup label="FDM de engenharia">
+                                <option value="PETG-CF">PETG-CF (fibra de carbono)</option><option value="PA">PA (nylon)</option>
+                                <option value="PPA">PPA</option><option value="PPS">PPS</option>
+                            </optgroup>
+                            <optgroup label="Resina">
+                                <option value="Resina (padrão)">Resina (padrão)</option><option value="Resina (tough)">Resina (tough)</option>
+                                <option value="Resina (lavável em água)">Resina (lavável em água)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-medium dark:text-gray-300">Marca</label><input type="text" id="spool-brand" placeholder="ex.: Creality" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                    <div>
+                        <label class="block text-sm font-medium dark:text-gray-300">Cor</label>
+                        <select id="spool-color" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2">
+                            <option value="Preto|bg-black">Preto</option><option value="Branco|bg-white">Branco</option><option value="Cinza|bg-gray-500">Cinza</option>
+                            <option value="Transparente|bg-gray-200">Transparente</option>
+                            <option value="Vermelho|bg-red-500">Vermelho</option><option value="Azul|bg-blue-500">Azul</option><option value="Verde|bg-green-500">Verde</option>
+                            <option value="Amarelo|bg-yellow-400">Amarelo</option><option value="Laranja|bg-orange-500">Laranja</option><option value="Roxo|bg-purple-500">Roxo</option>
+                        </select>
+                    </div>
+                </div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Dono (deixe vazio para o estoque da casa)</label><input type="text" id="spool-owner" placeholder="Casa (Slim3D) ou nome da equipe" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+                <div><label class="block text-sm font-medium dark:text-gray-300">Peso / volume (g ou ml)</label><input type="number" id="spool-weight" value="1000" class="mt-1 w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-add-spool')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveSpool()" class="px-4 py-2 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded hover:bg-gray-800 dark:hover:bg-gray-200">Cadastrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Registrar uso manual -->
+    <div id="modal-log-usage" class="modal fixed inset-0 bg-gray-900/50 dark:bg-gray-900/80 z-50 items-center justify-center">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[300px] overflow-hidden border dark:border-gray-700">
+            <div class="px-6 py-4 border-b dark:border-gray-700 font-bold text-lg dark:text-white">Registrar uso manual</div>
+            <div class="p-6"><input type="hidden" id="usage-group-key"><label class="block text-sm font-medium mb-1 dark:text-gray-300">Quantidade usada</label><input type="number" id="usage-grams" placeholder="50" class="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white rounded p-2"></div>
+            <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700/50 border-t dark:border-gray-700 flex justify-end gap-2">
+                <button onclick="closeModal('modal-log-usage')" class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Cancelar</button>
+                <button onclick="saveUsage()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Descontar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        // ===== Configuração =====
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxRMvYs56qHmrEKN8qg0CYsuuKNzPeSXcKdg1UKNo0fE3AkDGOAdPOtY90tp1kvInFd/exec';
+        const EMAILJS_SERVICE = 'service_4a46iff';
+        const EMAILJS_TEMPLATE = 'template_k2fujhm';
+        const PRINTERS = ['Hi Combo', 'K2 Combo', 'K2 Plus', 'Ender 5 Max', 'Sparkx I7', 'Halot X1', 'Saturn 2', 'Photon Mono'];
+        const STATUS_PT = { inbox: 'Recebido', scheduled: 'Agendado', done: 'Pronto', failed: 'Falhou' };
+        const CAT_PT = { Internal: 'Interno', Teams: 'Equipes', 'Affiliated Fablab': 'Fab Lab afiliado', Partners: 'Parceiros' };
+
+        // ===== Idioma (PT / EN) =====
+        const EN = {
+"* O material é descontado do estoque quando o pedido vai para \"Prontos\"": "* Material is deducted from stock when the job moves to \"Done\"",
+"+ Adicionar": "+ Add",
+"+ Cadastrar material": "+ Register material",
+"1. Recebidos": "1. Received",
+"2. Agendados / Imprimindo": "2. Scheduled / Printing",
+"3. Prontos": "3. Done",
+"4. Falharam": "4. Failed",
+"Adicionar": "Add",
+"Adicionar pedido manual": "Add manual job",
+"Agenda das máquinas": "Machine schedule",
+"Agenda semanal": "Weekly schedule",
+"Agendar impressão e material": "Schedule & material",
+"Amarelo": "Yellow",
+"Analíticos": "Analytics",
+"Analíticos da farm": "Farm analytics",
+"Arquivos 3D:": "3D files:",
+"Arraste os cards para mudar o status ou agendar · clique para ver detalhes": "Drag cards to change status or schedule · click for details",
+"Azul": "Blue",
+"Ação": "Action",
+"Baixar CSV": "Download CSV",
+"Baixe uma planilha com todas as impressões agendadas, prontas e que falharam.": "Download a spreadsheet of all scheduled, completed and failed prints.",
+"Branco": "White",
+"Buscar respostas do formulário ↻": "Fetch form submissions ↻",
+"Cadastrar": "Register",
+"Cadastrar material": "Register material",
+"Cancelar": "Cancel",
+"Casa (Slim3D) ou nome da equipe": "House (Slim3D) or team name",
+"Categorias de uso (%)": "Usage categories (%)",
+"Cinza": "Gray",
+"Confirmar": "Confirm",
+"Cor": "Color",
+"Data": "Date",
+"Data de fim": "End date",
+"Data de início": "Start date",
+"Descontar": "Subtract",
+"Descrição": "Description",
+"Descrição:": "Description:",
+"Dono (deixe vazio para o estoque da casa)": "Owner (leave empty for house stock)",
+"Duração estimada (horas)": "Estimated duration (hours)",
+"E-mail (para o aviso de pronto)": "Email (for the ready notice)",
+"E-mail:": "Email:",
+"Equipe": "Team",
+"Equipe ou pessoa": "Team or person",
+"Equipe:": "Team:",
+"Este ano": "This year",
+"Este mês": "This month",
+"Estoque de material": "Material stock",
+"Está pronto · enviar e-mail": "It's ready · send email",
+"Exportar registros (CSV)": "Export logs (CSV)",
+"FDM (filamento)": "FDM (filament)",
+"FDM de engenharia": "Engineering FDM",
+"FDM padrão": "Standard FDM",
+"Falhou": "Failed",
+"Fechar": "Close",
+"Filamento próprio:": "Own filament:",
+"Filtrar por impressora": "Filter by printer",
+"Fluxo de impressão e estoque": "Print workflow & inventory",
+"Hoje": "Today",
+"Horas de impressão por equipe": "Print hours by team",
+"Horas de máquina": "Machine hours",
+"Horas por impressora": "Hours per printer",
+"Horário agendado": "Scheduled time",
+"Impressora": "Printer",
+"Impressora usada": "Printer used",
+"Impressões por equipe (%)": "Prints by team (%)",
+"Início": "Start time",
+"Isso desconta do estoque o material perdido e registra o tempo de máquina gasto.": "This deducts the wasted material from stock and logs the machine time lost.",
+"Laranja": "Orange",
+"Marca": "Brand",
+"Materiais da casa mais usados": "Most used house materials",
+"Materiais das equipes mais usados": "Most used team materials",
+"Material da casa usado por equipe (g/ml)": "House material used by team (g/ml)",
+"Material e marca": "Material & brand",
+"Material perdido": "Wasted material",
+"Material total usado por equipe (g/ml)": "Total material used by team (g/ml)",
+"Material usado": "Assigned material",
+"Material:": "Material:",
+"Modo escuro": "Dark mode",
+"Modo claro": "Light mode",
+"Mês passado": "Last month",
+"Nome do projeto": "Project name",
+"PA (nylon)": "PA (nylon)",
+"PETG-CF (fibra de carbono)": "PETG-CF (carbon fiber)",
+"Peso / volume (g ou ml)": "Weight / volume (g or ml)",
+"Preto": "Black",
+"Projeto": "Project",
+"Quadro de pedidos": "Workflow board",
+"Quantidade perdida (g/ml)": "Wasted amount (g/ml)",
+"Quantidade usada": "Amount used",
+"Registrar falha": "Log failure",
+"Registrar impressão com falha": "Log failed print",
+"Registrar uso manual": "Log manual usage",
+"Resina": "Resin",
+"Resina (lavável em água)": "Resin (water-washable)",
+"Resina (padrão)": "Resin (standard)",
+"Resina (tough)": "Resin (tough)",
+"Restante (g/ml)": "Remaining (g/ml)",
+"Roxo": "Purple",
+"SLA/DLP (resina)": "SLA/DLP (resin)",
+"Telefone / WhatsApp": "Phone / WhatsApp",
+"Telefone:": "Phone:",
+"Tempo perdido (horas)": "Time wasted (hours)",
+"Tipo de material": "Material type",
+"Todas as impressoras": "All printers",
+"Todo o período": "All time",
+"Total de impressões": "Total print jobs",
+"Transparente": "Clear",
+"Unidades de material": "Material units",
+"Unidades/rolos": "Units/rolls",
+"Uso (g/ml)": "Usage (g/ml)",
+"Verde": "Green",
+"Vermelho": "Red",
+"aluno@universidade.edu.br": "student@university.edu",
+"ex.: Creality": "e.g. Creality",
+"Últimos 30 dias": "Last 30 days",
+"Últimos 7 dias": "Last 7 days",
+"🏠 Slim3D / Creality (estoque da casa)": "🏠 Slim3D / Creality (house stock)",
+"👥 Material das equipes": "👥 Team-owned stock",
+"💾 Salvar backup": "💾 Save backup",
+"📂 Carregar backup": "📂 Load backup",
+"🔍 Buscar projeto, equipe, e-mail...": "🔍 Search projects, teams, emails...",
+"Idioma": "Language",
+"Arquivo {0}": "File {0}",
+"Arquivo de backup inválido.": "Invalid backup file format.",
+"Backup carregado com sucesso!": "Backup file successfully loaded!",
+"Erro ao ler o arquivo.": "Error reading file.",
+"O nome do projeto é obrigatório.": "Project name is required.",
+"Livre": "Idle",
+"Imprimindo": "Printing",
+"Concluída": "Done",
+"({0}h no total)": "({0}h total)",
+"Horário:": "Time:",
+"Impressora:": "Printer:",
+"Baixar arquivo": "Download file",
+"✉ e-mail enviado {0}": "✉ email sent {0}",
+"Nenhum e-mail associado.": "No email associated.",
+"Sem descrição.": "No description.",
+"⬇ Baixar": "⬇ Download",
+"Abrir ↗": "Open ↗",
+"Nenhum arquivo anexado.": "No file attached.",
+"Recebido": "Received",
+"Agendado": "Scheduled",
+"Pronto": "Done",
+"{0} às {1} ({2}h)": "{0} at {1} ({2}h)",
+"✉ E-mail de \"pronto\" enviado em {0} para {1}": "✉ \"Ready\" email sent on {0} to {1}",
+"Reenviar e-mail de pronto": "Resend ready email",
+"Enviando…": "Sending…",
+"O e-mail de pronto já foi enviado em {0}. Enviar de novo para {1}?": "The ready email was already sent on {0}. Send it again to {1}?",
+"Marcar \"{0}\" como pronto e enviar o e-mail para {1}?": "Mark \"{0}\" as done and send the email to {1}?",
+"(sem e-mail)": "(no email)",
+"Descontado {0} g/ml do estoque. ": "Deducted {0} g/ml from stock. ",
+"Atenção: faltou registrar {0} g/ml no estoque. ": "Warning: {0} g/ml missing from recorded stock. ",
+"E-mail de pronto enviado para {0}!": "Ready email sent to {0}!",
+"O pedido foi marcado como pronto, mas o e-mail não foi enviado. Tente de novo pelo botão nos detalhes.": "The job was marked as done, but the email failed to send. Try again with the button in the details.",
+"Pedido marcado como pronto, mas não há e-mail válido nesta resposta.": "Job marked as done, but there is no valid email for this submission.",
+"Hora": "Time",
+"[{0} restantes]": "[{0} left]",
+"Casa (Slim3D)": "House (Slim3D)",
+"unidade(s)": "unit(s)",
+"Registrar uso": "Log usage",
+"Preencha todos os campos.": "Please fill all fields.",
+"CONFLITO: a {0} já está ocupada nesse horário.": "CONFLICT: {0} is busy during this time block.",
+"Atenção: faltou registrar {0} g/ml no estoque.": "Warning: {0} g/ml missing from recorded stock.",
+"De {0} a {1}": "From {0} to {1}",
+"A partir de {0}": "From {0}",
+"Até {0}": "Until {0}",
+"{0} impressão(ões) · {1} falha(s) · {2} h de máquina": "{0} print(s) · {1} failure(s) · {2} machine hours",
+"(pela data agendada da impressão; o CSV também segue este período)": "(by scheduled print date; the CSV export uses this period too)",
+"Sem dados": "No data",
+"Horas de impressão": "Print hours",
+"Material usado (g/ml)": "Material used (g/ml)",
+"Material da casa (g/ml)": "House material (g/ml)",
+"Impressões": "Prints",
+"Categoria": "Category",
+"Interno": "Internal",
+"Equipes": "Teams",
+"Fab Lab afiliado": "Affiliated Fab Lab",
+"Parceiros": "Partners",
+"Equipe/Pessoa": "Team/User",
+"E-mail": "Email",
+"Duração (h)": "Duration (h)",
+"Quantidade (g/ml)": "Amount (g/ml)",
+"E-mail de pronto enviado": "Ready email sent",
+"FALHOU": "FAILED",
+"(falha #{0})": "(fail #{0})",
+"Registros": "Print_Logs",
+"Todas": "All",
+"Nenhum registro de impressão para esta máquina no período escolhido.": "No print logs found for this machine in the selected period.",
+"✎ Alterar empresa": "✎ Change company",
+"Alterar empresa / equipe": "Change company / team",
+"Enviado no formulário:": "Sent in the form:",
+"Nome correto da empresa": "Correct company name",
+"Nomes parecidos que já enviaram": "Similar names already submitted",
+"Todas as empresas": "All companies",
+"Voltar ao nome enviado": "Back to the submitted name",
+"Salvar": "Save",
+"Enviado no formulário como: {0}": "Sent in the form as: {0}",
+"Nenhum nome parecido encontrado.": "No similar names found.",
+"Aplicar a todos os pedidos enviados como \"{0}\" ({1}), inclusive os próximos": "Apply to all jobs submitted as \"{0}\" ({1}), including future ones",
+"Hoje \"{0}\" já está unificado como \"{1}\".": "\"{0}\" is currently merged into \"{1}\".",
+"Escreva o nome da empresa.": "Please type the company name.",
+"✎ Editar dados": "✎ Edit details",
+"Editar dados do pedido": "Edit job details",
+"Este pedido está em \"Falharam\": você está editando a última falha registrada.": "This job is in \"Failed\": you are editing the last failure logged.",
+"Duração (horas)": "Duration (hours)",
+"Quantidade de material (g/ml)": "Material amount (g/ml)",
+"Salvar alterações": "Save changes",
+"[sem estoque]": "[out of stock]",
+"O material já foi descontado do estoque. Ao salvar, o painel devolve a quantidade antiga e desconta a nova automaticamente.": "Material was already deducted from stock. On save, the panel returns the old amount and deducts the new one automatically.",
+"O material só é descontado do estoque quando o pedido vai para \"Prontos\".": "Material is only deducted from stock when the job moves to \"Done\".",
+"Escolha o material e a quantidade juntos.": "Choose the material and the amount together.",
+"✎ Editado em {0}": "✎ Edited on {0}",
+"Exportar trabalhos concluídos": "Export completed jobs",
+"Planilha com os trabalhos de impressão concluídos (coluna \"Prontos\"), uma linha por trabalho. Usa o período escolhido no filtro de datas dos analíticos.": "Spreadsheet of completed print jobs (\"Done\" column), one row per job. Uses the period chosen in the analytics date filter.",
+"Google Planilhas": "Google Sheets",
+"⬇ Excel (.xlsx)": "⬇ Excel (.xlsx)",
+"Nome do Projeto": "Project name",
+"Nome de quem enviou": "Submitted by",
+"Telefone": "Phone",
+"Tempo de impressão (h)": "Print time (h)",
+"Material": "Material",
+"Máquina": "Machine",
+"Material próprio": "Own material",
+"Material próprio:": "Own material:",
+"Sim": "Yes",
+"Não": "No",
+"Enviado por:": "Submitted by:",
+"Automático (pelo material usado)": "Automatic (from material used)",
+"Período: {0}": "Period: {0}",
+"Colunas: {0}": "Columns: {0}",
+"{0} trabalho(s) concluído(s) serão exportados.": "{0} completed job(s) will be exported.",
+"{0} sem nome de quem enviou": "{0} without submitter name",
+"{0} sem telefone": "{0} without phone",
+"{0} sem e-mail": "{0} without email",
+"{0} sem tempo de impressão": "{0} without print time",
+"{0} sem quantidade de material": "{0} without material amount",
+"{0} sem material": "{0} without material",
+"{0} sem máquina": "{0} without machine",
+"{0} sem informação de material próprio": "{0} without own-material info",
+"{0} trabalho(s) concluído(s) sem data ficaram fora do período (escolha \"Todo o período\" para incluir)": "{0} completed job(s) without a date are outside the period (choose \"All time\" to include them)",
+"Esses campos saem em branco. Complete pelo botão ✎ Editar dados do pedido, se quiser.": "These fields will be blank. You can fill them in with the job's ✎ Edit details button.",
+"Trabalhos concluídos": "Completed jobs",
+"Trabalhos_concluidos": "Completed_jobs",
+"inicio": "start",
+"Nenhum trabalho concluído para exportar com esses filtros.": "No completed jobs to export with these filters.",
+"Gerando…": "Generating…",
+"O arquivo \"{0}\" foi baixado e o Google Planilhas abriu em outra aba. Lá, clique no ícone de pasta (Abrir seletor de arquivos) → Fazer upload e escolha esse arquivo. Ele abre como planilha do Google.": "\"{0}\" was downloaded and Google Sheets opened in another tab. There, click the folder icon (Open file picker) → Upload and choose that file. It opens as a Google Sheet.",
+"Não foi possível gerar a planilha. Verifique a conexão com a internet e tente de novo.": "Could not generate the spreadsheet. Check your internet connection and try again."
+};
+        let LANG = 'pt';
+        try { if (localStorage.getItem('slim3d_lang') === 'en') LANG = 'en'; } catch (e) {}
+        // T('texto em português {0}', valor) devolve o texto no idioma atual
+        function T(s, ...a) {
+            const r = (LANG === 'en' && EN[s] !== undefined) ? EN[s] : s;
+            return String(r).replace(/\{(\d)\}/g, (_, i) => a[i] ?? '');
+        }
+        const LOC = () => LANG === 'en' ? 'en-US' : 'pt-BR';
+        // Traduz os textos fixos da página (guarda o original em português)
+        const ORIG_TXT = new WeakMap(), ORIG_ATTR = new WeakMap();
+        function translateStatic() {
+            const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode: n => (n.parentElement && !n.parentElement.closest('script,style')) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+            });
+            let n;
+            while ((n = w.nextNode())) {
+                if (!ORIG_TXT.has(n)) ORIG_TXT.set(n, n.nodeValue);
+                const o = ORIG_TXT.get(n), k = o.trim();
+                if (!k || EN[k] === undefined) continue;
+                n.nodeValue = LANG === 'en' ? o.replace(k, EN[k]) : o;
+            }
+            document.querySelectorAll('[placeholder],[title],optgroup[label],[aria-label]').forEach(el => {
+                const st = ORIG_ATTR.get(el) || {};
+                ['placeholder', 'title', 'label', 'aria-label'].forEach(a => {
+                    if (!el.hasAttribute(a)) return;
+                    if (!(a in st)) st[a] = el.getAttribute(a);
+                    const o = st[a];
+                    if (EN[o] !== undefined) el.setAttribute(a, LANG === 'en' ? EN[o] : o);
+                });
+                ORIG_ATTR.set(el, st);
+            });
+            document.documentElement.lang = LANG === 'en' ? 'en' : 'pt-BR';
+            document.title = LANG === 'en' ? 'Admin Dashboard | Slim3D Print Farm' : 'Painel Admin | Slim3D Print Farm';
+            document.getElementById('lang-pt').setAttribute('aria-pressed', LANG === 'pt');
+            document.getElementById('lang-en').setAttribute('aria-pressed', LANG === 'en');
+        }
+        let openDetailsId = null;
+        function setLang(l) {
+            LANG = l === 'en' ? 'en' : 'pt';
+            try { localStorage.setItem('slim3d_lang', LANG); } catch (e) {}
+            translateStatic();
+            updateThemeIcon();
+            renderAll();
+            if (openDetailsId && document.getElementById('modal-job-details').classList.contains('active')) openJobDetails(openDetailsId);
+        }
+
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const ownerLabel = o => o === 'House' ? T('Casa (Slim3D)') : o;
+        const fmtBR = iso => { if (!iso) return ''; const [y, m, d] = iso.split('-'); return LANG === 'en' ? `${m}/${d}/${y}` : `${d}/${m}/${y}`; };
+        const nowBR = () => new Date().toLocaleString(LOC(), { dateStyle: 'short', timeStyle: 'short' });
+
+        const formatYMD = (d) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        let weekOffset = 0;
+
+        const getStartOfWeek = (offset) => {
+            const now = new Date();
+            const day = now.getDay();
+            const diffToMonday = (day === 0 ? -6 : 1) - day;
+            const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday + (offset * 7));
+            monday.setHours(0, 0, 0, 0);
+            return monday;
+        };
+
+        const getFilamentGroupKey = (f) => `${f.brand}|${f.color}|${f.owner}|${f.colorCss}`;
+
+        const state = {
+            projects: [],
+            filaments: [
+                { id: 'f1', brand: 'Creality PLA', color: 'Vermelho', colorCss: 'bg-red-500', owner: 'House', weight: 850, max: 1000 },
+                { id: 'f2', brand: 'Creality PETG-CF', color: 'Preto', colorCss: 'bg-black', owner: 'House', weight: 1000, max: 1000 },
+                { id: 'f3', brand: 'Overture TPU', color: 'Preto', colorCss: 'bg-black', owner: 'Robotics Team', weight: 600, max: 1000 },
+                { id: 'f4', brand: 'Anycubic Resina (padrão)', color: 'Cinza', colorCss: 'bg-gray-500', owner: 'House', weight: 1000, max: 1000 }
+            ],
+            teamAliases: {},
+            draggedId: null
+        };
+
+        const charts = {};
+
+        // ===== Arquivos (Google Drive) =====
+        function driveId(url) {
+            const s = String(url || '');
+            const m = s.match(/[?&]id=([\w-]{20,})/) || s.match(/\/d\/([\w-]{20,})/);
+            return m ? m[1] : null;
+        }
+        // Aceita fp.files (lista de links ou {name,url}) ou fp.fileUrl (um link ou vários separados por vírgula)
+        function normalizeFiles(fp) {
+            let raw = [];
+            if (Array.isArray(fp.files)) raw = fp.files;
+            else if (fp.fileUrl && fp.fileUrl !== '#') raw = String(fp.fileUrl).split(/[,\s]+/).filter(Boolean);
+            return raw.map((f, i) => {
+                const url = typeof f === 'string' ? f : (f.url || '');
+                const name = (typeof f === 'object' && f.name) ? f.name : T('Arquivo {0}', i + 1);
+                const id = driveId(url);
+                return {
+                    name,
+                    view: id ? `https://drive.google.com/file/d/${id}/view` : url,
+                    download: id ? `https://drive.google.com/uc?export=download&id=${id}` : url
+                };
+            }).filter(f => f.view);
+        }
+        function whatsappLink(phone) {
+            let d = String(phone || '').replace(/\D/g, '');
+            if (!d) return '';
+            if (d.length <= 11) d = '55' + d;
+            return d.length >= 12 ? `https://wa.me/${d}` : '';
+        }
+
+        // ===== Modo escuro =====
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('slim3d_theme', isDark ? 'dark' : 'light');
+            updateThemeIcon();
+            renderAnalytics();
+            renderCalendar();
+        }
+
+        function updateThemeIcon() {
+            const isDark = document.documentElement.classList.contains('dark');
+            document.getElementById('theme-icon').innerText = isDark ? '☀️' : '🌙';
+            document.getElementById('theme-text').innerText = isDark ? T('Modo claro') : T('Modo escuro');
+        }
+
+        // ===== Salvar / carregar =====
+        function saveLocalState() {
+            localStorage.setItem('slim3d_state', JSON.stringify(state));
+        }
+
+        function loadLocalState() {
+            const s = localStorage.getItem('slim3d_state');
+            if (s) {
+                const parsed = JSON.parse(s);
+                state.projects = parsed.projects || [];
+                state.filaments = parsed.filaments || [];
+                state.teamAliases = parsed.teamAliases || {};
+            }
+        }
+
+        function saveStateToFile() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const a = document.createElement('a');
+            a.setAttribute("href", dataStr);
+            a.setAttribute("download", `slim3d_backup_${formatYMD(new Date())}.json`);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        function triggerLoadState() {
+            document.getElementById('load-state-input').click();
+        }
+
+        function loadStateFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const loaded = JSON.parse(e.target.result);
+                    if (loaded.projects && loaded.filaments) {
+                        state.projects = loaded.projects;
+                        state.filaments = loaded.filaments;
+                        state.teamAliases = loaded.teamAliases || {};
+                        renderAll();
+                        alert(T('Backup carregado com sucesso!'));
+                    } else {
+                        alert(T('Arquivo de backup inválido.'));
+                    }
+                } catch (err) {
+                    alert(T('Erro ao ler o arquivo.'));
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        async function init() {
+            translateStatic();
+            updateThemeIcon();
+            document.getElementById('an-start').value = anStart;
+            document.getElementById('an-end').value = anEnd;
+            document.getElementById('an-start').addEventListener('change', e => applyRange(e.target.value, anEnd));
+            document.getElementById('an-end').addEventListener('change', e => applyRange(anStart, e.target.value));
+            setupNavigation();
+            loadLocalState();
+            await fetchData();
+            setInterval(() => {
+                updatePrinterStatus();
+                renderCalendar();
+            }, 60000);
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const formProjects = await response.json();
+
+                const manual = state.projects.filter(p => p.manual);
+                const fromForm = formProjects.map(fp => {
+                    let parsedEmail = (fp.email || '').trim();
+                    if (!parsedEmail && fp.description) {
+                        const m = fp.description.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/);
+                        if (m) parsedEmail = m[1];
+                    }
+                    const txt = v => (v === null || v === undefined) ? '' : String(v).trim();
+                    const extras = {
+                        email: parsedEmail,
+                        files: normalizeFiles(fp),
+                        submitter: txt(fp.submitter || fp.senderName || fp.fullName || fp.nomeCompleto || fp.nome || fp.solicitante || fp.requester),
+                        phone: txt(fp.phone || fp.telefone || fp.whatsapp || fp.celular || fp.tel),
+                        material: txt(fp.material),
+                        ownFilament: txt(fp.ownFilament || fp.filamentoProprio || fp.materialProprio || fp.ownMaterial)
+                    };
+
+                    const existing = state.projects.find(p => p.id === fp.id);
+                    if (existing) {
+                        return {
+                            ...fp, ...extras,
+                            status: existing.status,
+                            printer: existing.printer,
+                            date: existing.date,
+                            time: existing.time,
+                            duration: existing.duration,
+                            filamentGroup: existing.filamentGroup,
+                            filamentUsage: existing.filamentUsage,
+                            deducted: existing.deducted,
+                            emailSentAt: existing.emailSentAt || null,
+                            teamOverride: existing.teamOverride || null,
+                            ownMaterialOverride: existing.ownMaterialOverride || null,
+                            doneAt: existing.doneAt || null,
+                            ...(existing.editedAt ? {
+                                name: existing.name, email: existing.email, editedAt: existing.editedAt,
+                                submitter: existing.submitter || extras.submitter,
+                                phone: existing.phone || extras.phone
+                            } : {}),
+                            failedLogs: existing.failedLogs || []
+                        };
+                    }
+                    return { ...fp, ...extras, status: fp.status || 'inbox', failedLogs: [] };
+                });
+                state.projects = [...fromForm, ...manual.filter(m => !fromForm.some(f => f.id === m.id))];
+                renderAll();
+            } catch (err) {
+                console.error("Erro ao buscar respostas do formulário: ", err);
+                renderAll();
+            }
+        }
+
+        function setupNavigation() {
+            const navButtons = document.querySelectorAll('.nav-btn');
+            const views = document.querySelectorAll('.view-section');
+            navButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    navButtons.forEach(b => {
+                        b.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-white');
+                        b.classList.add('text-gray-600', 'dark:text-gray-400');
+                    });
+                    btn.classList.remove('text-gray-600', 'dark:text-gray-400');
+                    btn.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-white');
+                    views.forEach(v => v.classList.remove('active'));
+                    document.getElementById(btn.getAttribute('data-target')).classList.add('active');
+                });
+            });
+            const first = document.querySelector('.nav-btn');
+            if (first) first.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-900', 'dark:text-white');
+        }
+
+        function saveNewJob() {
+            const name = document.getElementById('add-job-name').value;
+            const team = document.getElementById('add-job-team').value || 'Admin';
+            const email = document.getElementById('add-job-email').value || '';
+            const phone = document.getElementById('add-job-phone').value || '';
+            const submitter = (document.getElementById('add-job-submitter').value || '').trim();
+            const desc = document.getElementById('add-job-desc').value || '';
+
+            if (!name) return alert(T('O nome do projeto é obrigatório.'));
+
+            state.projects.push({
+                id: 'p' + Date.now(),
+                manual: true,
+                name, team, email, phone, submitter,
+                status: 'inbox',
+                printer: null, date: null, time: null, duration: null,
+                description: desc,
+                files: [],
+                failedLogs: []
+            });
+
+            ['add-job-name', 'add-job-email', 'add-job-phone', 'add-job-submitter', 'add-job-desc'].forEach(id => document.getElementById(id).value = '');
+            closeModal('modal-add-job');
+            renderAll();
+        }
+
+        function updatePrinterStatus() {
+            const now = new Date();
+            const headerContainer = document.getElementById('printer-status-header');
+            let html = '';
+
+            PRINTERS.forEach(printerName => {
+                const pProjects = state.projects.filter(p => (p.status === 'scheduled' || p.status === 'done') && p.printer === printerName);
+                let currentStatus = 'Livre'; let percent = 0;
+                let statusClass = 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400'; let dotClass = 'bg-gray-400 dark:bg-gray-500';
+
+                const totalHoursOnMachine = state.projects.reduce((acc, proj) => {
+                    let total = acc;
+                    if (proj.printer === printerName && proj.duration) total += proj.duration;
+                    if (proj.failedLogs) proj.failedLogs.forEach(log => { if (log.printer === printerName) total += log.duration; });
+                    return total;
+                }, 0);
+
+                pProjects.sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`));
+
+                for (let p of pProjects) {
+                    if (!p.date || !p.time || !p.duration) continue;
+                    const start = new Date(`${p.date}T${p.time}`);
+                    const end = new Date(start.getTime() + p.duration * 3600000);
+                    const doneBuffer = new Date(end.getTime() + 15 * 60000);
+
+                    if (now >= start && now < end) {
+                        currentStatus = 'Imprimindo'; percent = Math.floor(((now - start) / (end - start)) * 100);
+                        statusClass = 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300'; dotClass = 'bg-green-500 animate-pulse';
+                        break;
+                    } else if (now >= end && now < doneBuffer) {
+                        currentStatus = 'Concluída';
+                        statusClass = 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300'; dotClass = 'bg-blue-500 animate-pulse';
+                        break;
+                    }
+                }
+
+                let textDisplay = T(currentStatus);
+                if (currentStatus === 'Imprimindo') textDisplay += ` (${percent}%)`;
+
+                html += `
+                    <div class="flex items-center gap-2 px-3 py-1 ${statusClass} border rounded text-xs whitespace-nowrap transition-colors duration-200">
+                        <span class="w-2 h-2 rounded-full ${dotClass}"></span>
+                        <span class="font-bold">${printerName}</span>: ${textDisplay}
+                        <span class="text-gray-400 dark:text-gray-500 text-[10px] ml-1">${T('({0}h no total)', totalHoursOnMachine)}</span>
+                    </div>`;
+            });
+            headerContainer.innerHTML = html;
+        }
+
+        function renderKanban() {
+            const q = (document.getElementById('kanban-search')?.value || '').toLowerCase();
+            const cols = { inbox: [], scheduled: [], done: [], failed: [] };
+
+            state.projects.forEach(p => {
+                const ok = !q ||
+                    (p.name && p.name.toLowerCase().includes(q)) ||
+                    (teamOf(p) && teamOf(p).toLowerCase().includes(q)) || (p.team && p.team.toLowerCase().includes(q)) ||
+                    (p.email && p.email.toLowerCase().includes(q));
+                if (cols[p.status] && ok) cols[p.status].push(p);
+            });
+
+            const sortDesc = (a, b) => {
+                if (!a.date || !b.date) return 0;
+                return new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`);
+            };
+            cols.done.sort(sortDesc);
+            cols.failed.sort(sortDesc);
+
+            Object.keys(cols).forEach(colId => {
+                document.getElementById(`count-${colId}`).innerText = cols[colId].length;
+                const colEl = document.getElementById(`col-${colId}`);
+                colEl.innerHTML = '';
+
+                cols[colId].forEach(p => {
+                    let extraInfo = '';
+                    if (p.status === 'scheduled' || p.status === 'done' || p.status === 'failed') {
+                        const matDisplay = p.filamentGroup ? p.filamentGroup.split('|')[0] : '—';
+                        const displayUsage = p.status === 'failed' && p.failedLogs && p.failedLogs.length > 0
+                            ? p.failedLogs[p.failedLogs.length - 1].usage : p.filamentUsage;
+                        if (p.date || p.printer) {
+                            extraInfo = `
+                            <div class="mt-2 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-1.5 rounded border border-gray-100 dark:border-gray-600">
+                                <p><strong>${T('Horário:')}</strong> ${esc(fmtBR(p.date))} • ${esc(p.time || '')}</p>
+                                <p><strong>${T('Impressora:')}</strong> ${esc(p.printer || '—')}</p>
+                                <p><strong>${T('Material:')}</strong> ${esc(displayUsage ?? 0)} g/ml (${esc(matDisplay)})</p>
+                            </div>`;
+                        }
+                    }
+                    const files = p.files || [];
+                    const fileBtns = files.length
+                        ? `<a href="${esc(files[0].download)}" target="_blank" rel="noopener" class="text-xs border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600 px-1.5 py-0.5 rounded" title="${T('Baixar arquivo')}" onclick="event.stopPropagation()">⬇${files.length > 1 ? ' ' + files.length : ''}</a>`
+                        : '';
+                    const mailTag = p.emailSentAt ? `<span class="text-[10px] text-green-700 dark:text-green-400 block mt-1">${T('✉ e-mail enviado {0}', esc(p.emailSentAt))}</span>` : '';
+
+                    const card = document.createElement('div');
+                    card.className = "bg-white dark:bg-gray-700 p-3 rounded border border-gray-200 dark:border-gray-600 mb-2 shadow-sm kanban-card transition-shadow hover:shadow-md";
+                    card.draggable = true; card.id = p.id;
+                    card.innerHTML = `
+                        <span class="text-xs font-semibold bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-0.5 rounded mb-2 inline-block">${esc(teamOf(p))}</span>
+                        <div class="flex justify-between items-start gap-2">
+                            <h4 class="font-medium text-sm text-blue-900 dark:text-blue-300">${esc(p.name)}</h4>
+                            <div class="flex gap-1 flex-shrink-0">${fileBtns}</div>
+                        </div>
+                        ${p.material ? `<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${esc(p.material)}</p>` : ''}
+                        ${extraInfo}
+                        ${mailTag}
+                    `;
+                    card.addEventListener('dragstart', () => { state.draggedId = p.id; setTimeout(() => card.classList.add('dragging'), 0); });
+                    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+                    card.addEventListener('click', () => { if (!card.classList.contains('dragging')) openJobDetails(p.id); });
+                    colEl.appendChild(card);
+                });
+
+                if (!colEl.hasAttribute('data-listeners-attached')) {
+                    colEl.addEventListener('dragover', (e) => { e.preventDefault(); colEl.classList.add('drag-over'); });
+                    colEl.addEventListener('dragleave', () => colEl.classList.remove('drag-over'));
+                    colEl.addEventListener('drop', (e) => handleDrop(e, colId, colEl));
+                    colEl.setAttribute('data-listeners-attached', 'true');
+                }
+            });
+        }
+
+        function openJobDetails(id) {
+            const p = state.projects.find(proj => proj.id === id);
+            if (!p) return;
+            openDetailsId = id;
+            const $ = i => document.getElementById(i);
+            $('job-det-name').innerText = p.name;
+            $('job-det-team').innerText = teamOf(p) || '—';
+            $('job-det-team-orig').innerText = (p.team && teamOf(p) !== p.team) ? T('Enviado no formulário como: {0}', p.team) : '';
+            $('job-det-team-edit').onclick = () => openTeamModal(p.id);
+            $('job-det-email').innerText = p.email || T('Nenhum e-mail associado.');
+            $('job-det-desc').innerText = p.description || T('Sem descrição.');
+
+            const rowFill = (row, el, val) => { $(row).classList.toggle('hidden', !val); $(el).innerText = val || ''; };
+            rowFill('job-det-phone-row', 'job-det-phone', p.phone);
+            rowFill('job-det-material-row', 'job-det-material', p.material);
+            rowFill('job-det-submitter-row', 'job-det-submitter', p.submitter);
+            const ownV = ownMaterialOf(p);
+            rowFill('job-det-own-row', 'job-det-own', ownV === null ? '' : (ownV ? T('Sim') : T('Não')));
+
+            const files = p.files || [];
+            $('job-det-files').innerHTML = files.length
+                ? files.map(f => `
+                    <div class="bg-gray-50 dark:bg-gray-700 p-2.5 rounded border dark:border-gray-600 flex justify-between items-center gap-2">
+                        <span class="font-medium truncate">${esc(/^(Arquivo|File) \d+$/.test(f.name) ? T('Arquivo {0}', f.name.split(' ')[1]) : f.name)}</span>
+                        <span class="flex gap-1 flex-shrink-0">
+                            <a href="${esc(f.download)}" target="_blank" rel="noopener" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium">${T('⬇ Baixar')}</a>
+                            <a href="${esc(f.view)}" target="_blank" rel="noopener" class="text-xs bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white px-3 py-1.5 rounded font-medium">${T('Abrir ↗')}</a>
+                        </span>
+                    </div>`).join('')
+                : `<p class="text-gray-500 dark:text-gray-400">${T('Nenhum arquivo anexado.')}</p>`;
+
+            const statusEl = $('job-det-status');
+            statusEl.innerText = T(STATUS_PT[p.status] || p.status);
+            let cls = 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200';
+            if (p.status === 'done') cls = 'bg-green-100 dark:bg-green-900 dark:text-green-200 text-green-800';
+            if (p.status === 'scheduled') cls = 'bg-blue-100 dark:bg-blue-900 dark:text-blue-200 text-blue-800';
+            if (p.status === 'failed') cls = 'bg-red-100 dark:bg-red-900 dark:text-red-200 text-red-800';
+            statusEl.className = 'px-2 py-1 rounded text-xs font-semibold uppercase tracking-wide whitespace-nowrap ' + cls;
+
+            const sched = $('job-det-sched-info');
+            if ((p.status === 'scheduled' || p.status === 'done' || p.status === 'failed') && p.printer) {
+                sched.classList.remove('hidden');
+                $('job-det-printer').innerText = p.printer;
+                $('job-det-time').innerText = T('{0} às {1} ({2}h)', fmtBR(p.date), p.time, p.duration);
+                const filName = p.filamentGroup ? p.filamentGroup.split('|')[0] + ' (' + p.filamentGroup.split('|')[1] + ')' : '—';
+                $('job-det-fil').innerText = `${filName} · ${p.filamentUsage || 0} g/ml`;
+            } else {
+                sched.classList.add('hidden');
+            }
+
+            const wa = whatsappLink(p.phone);
+            $('job-det-whatsapp').classList.toggle('hidden', !wa);
+            $('job-det-whatsapp').href = wa || '#';
+
+            const info = $('job-det-mailinfo');
+            $('job-det-edited').innerText = p.editedAt ? T('✎ Editado em {0}', p.editedAt) : '';
+            info.classList.toggle('hidden', !p.emailSentAt);
+            info.innerText = p.emailSentAt ? T('✉ E-mail de "pronto" enviado em {0} para {1}', p.emailSentAt, p.email) : '';
+
+            $('job-det-failed').onclick = () => { closeModal('modal-job-details'); openFailed(p); };
+            $('job-det-edit').onclick = () => openEditJob(p.id);
+
+            const btn = $('job-det-ready');
+            btn.disabled = false;
+            btn.innerText = p.emailSentAt ? T('Reenviar e-mail de pronto') : T('Está pronto · enviar e-mail');
+            btn.onclick = async () => {
+                btn.disabled = true; btn.innerText = T('Enviando…');
+                await markDone(p);
+                openJobDetails(p.id);
+            };
+
+            openModal('modal-job-details');
+        }
+
+        // Marca como pronto: desconta material e envia o e-mail para quem respondeu o formulário
+        async function markDone(proj) {
+            if (proj.emailSentAt && !confirm(T('O e-mail de pronto já foi enviado em {0}. Enviar de novo para {1}?', proj.emailSentAt, proj.email))) {
+                if (!proj.doneAt) proj.doneAt = formatYMD(new Date());
+                proj.status = 'done'; renderAll(); return;
+            }
+            if (!proj.emailSentAt && proj.status !== 'done' && !confirm(T('Marcar "{0}" como pronto e enviar o e-mail para {1}?', proj.name, proj.email || T('(sem e-mail)')))) {
+                renderAll(); return;
+            }
+
+            if (proj.status !== 'done' || !proj.doneAt) proj.doneAt = formatYMD(new Date());
+            proj.status = 'done';
+            let msg = '';
+            if (proj.filamentGroup && proj.filamentUsage && !proj.deducted) {
+                const shortage = deductFilamentFromGroup(proj.filamentGroup, proj.filamentUsage);
+                proj.deducted = true;
+                msg += T('Descontado {0} g/ml do estoque. ', proj.filamentUsage);
+                if (shortage > 0) msg += T('Atenção: faltou registrar {0} g/ml no estoque. ', shortage);
+            }
+
+            if (proj.email && proj.email.includes('@')) {
+                try {
+                    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+                        to_name: proj.team || proj.name,
+                        to_email: proj.email,
+                        project_name: proj.name
+                    });
+                    proj.emailSentAt = nowBR();
+                    msg += T('E-mail de pronto enviado para {0}!', proj.email);
+                } catch (err) {
+                    console.error("Erro no EmailJS:", err);
+                    msg += T('O pedido foi marcado como pronto, mas o e-mail não foi enviado. Tente de novo pelo botão nos detalhes.');
+                }
+            } else {
+                msg += T('Pedido marcado como pronto, mas não há e-mail válido nesta resposta.');
+            }
+            renderAll();
+            alert(msg);
+        }
+
+        function changeWeek(delta) { weekOffset += delta; renderCalendar(); }
+        function resetWeek() { weekOffset = 0; renderCalendar(); }
+
+        function renderCalendar() {
+            const startOfWeek = getStartOfWeek(weekOffset);
+            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6);
+            document.getElementById('week-label').innerText = `${startOfWeek.toLocaleDateString(LOC(), { day: 'numeric', month: 'short' })} – ${endOfWeek.toLocaleDateString(LOC(), { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+            const header = document.getElementById('calendar-header');
+            let headHTML = `<div class="w-16 py-2 border-r dark:border-gray-700">${T('Hora')}</div>`;
+            const columnDates = [];
+            const DIAS = LANG === 'en' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(startOfWeek.getDate() + i);
+                columnDates.push(formatYMD(colDate));
+                headHTML += `<div class="flex-1 py-2 border-r dark:border-gray-700 flex flex-col"><span class="font-bold">${DIAS[i]}</span><span class="text-xs font-normal">${colDate.getDate()}</span></div>`;
+            }
+            header.innerHTML = headHTML;
+
+            const grid = document.getElementById('calendar-grid');
+            const ROW_HEIGHT = 48;
+            let html = `<div class="flex relative" style="min-height: ${24 * ROW_HEIGHT}px">`;
+
+            html += `<div class="w-16 border-r dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 dark:text-gray-500 text-right pr-2">`;
+            for (let i = 0; i < 24; i++) html += `<div style="height: ${ROW_HEIGHT}px" class="pt-1 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''}">${i < 10 ? '0' + i : i}:00</div>`;
+            html += `</div>`;
+
+            const pColors = {
+                'Hi Combo': 'green', 'K2 Combo': 'blue', 'K2 Plus': 'purple', 'Ender 5 Max': 'orange', 'Sparkx I7': 'indigo',
+                'Halot X1': 'pink', 'Saturn 2': 'teal', 'Photon Mono': 'cyan'
+            };
+
+            const todayYMD = formatYMD(new Date());
+            const now = new Date();
+            const isDark = document.documentElement.classList.contains('dark');
+
+            for (let d = 0; d < 7; d++) {
+                const targetDate = columnDates[d];
+                html += `<div class="flex-1 border-r border-gray-100 dark:border-gray-700 relative">`;
+                for (let i = 1; i < 24; i++) html += `<div class="border-t border-gray-100 dark:border-gray-700 w-full absolute" style="height: ${ROW_HEIGHT}px; top:${i * ROW_HEIGHT}px"></div>`;
+
+                if (targetDate === todayYMD) {
+                    const mins = now.getHours() * 60 + now.getMinutes();
+                    const topOffset = (mins / 60) * ROW_HEIGHT;
+                    html += `
+                        <div class="absolute w-full z-30 flex items-center" style="top: ${topOffset}px; left: 0; pointer-events: none;">
+                            <div class="w-full border-t-2 border-red-500"></div>
+                            <div class="w-2 h-2 bg-red-500 rounded-full absolute -left-1"></div>
+                        </div>`;
+                }
+
+                const dayProjs = state.projects.filter(p => (p.status === 'scheduled' || p.status === 'done') && p.date === targetDate && p.time);
+                dayProjs.sort((a, b) => (a.time.split(':')[0] * 60 + a.time.split(':')[1] * 1) - (b.time.split(':')[0] * 60 + b.time.split(':')[1] * 1));
+
+                const tracks = [];
+                dayProjs.forEach(p => {
+                    if (!p.time || !p.duration) return;
+                    const [sh, sm] = p.time.split(':').map(Number);
+                    const startMins = sh * 60 + sm; const endMins = startMins + (p.duration * 60);
+                    p._startMins = startMins; p._endMins = endMins;
+                    let placed = false;
+                    for (let i = 0; i < tracks.length; i++) {
+                        if (tracks[i] <= startMins) { tracks[i] = endMins; p._track = i; placed = true; break; }
+                    }
+                    if (!placed) { p._track = tracks.length; tracks.push(endMins); }
+                });
+
+                const widthPct = 100 / Math.max(1, tracks.length);
+
+                dayProjs.forEach(p => {
+                    if (p._startMins === undefined) return;
+                    const topOffset = (p._startMins / 60) * ROW_HEIGHT; const height = p.duration * ROW_HEIGHT;
+                    const c = pColors[p.printer] || 'gray';
+                    let cardClass = `absolute border rounded p-1 text-xs shadow-sm overflow-hidden z-10 hover:z-20 hover:shadow-md cursor-pointer transition-colors`;
+                    const cardStyle = `top: ${topOffset}px; height: ${height}px; left: ${p._track * widthPct}%; width: calc(${widthPct}% - 2px); margin: 0 1px;`;
+                    cardClass += isDark ? ` bg-gray-700 border-gray-600` : ` bg-${c}-100 border-${c}-300`;
+                    html += `
+                    <div class="${cardClass}" style="${cardStyle}" onclick="openJobDetails('${esc(p.id)}')">
+                        <div class="font-bold ${isDark ? 'text-white' : `text-${c}-900`} truncate">${esc(p.name)}</div>
+                        <div class="${isDark ? 'text-gray-300' : `text-${c}-700`} truncate">${esc(p.printer)}</div>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+            html += `</div>`; grid.innerHTML = html;
+        }
+
+        function getGroupedFilaments() {
+            const groups = {};
+            state.filaments.forEach(f => {
+                const key = getFilamentGroupKey(f);
+                if (!groups[key]) groups[key] = { key, brand: f.brand, color: f.color, colorCss: f.colorCss, owner: f.owner, weight: 0, max: 0, rolls: 0 };
+                groups[key].weight += f.weight; groups[key].max += f.max; groups[key].rolls += 1;
+            });
+            return groups;
+        }
+
+        function deductFilamentFromGroup(groupKey, amount) {
+            let remaining = amount;
+            const spools = state.filaments.filter(f => getFilamentGroupKey(f) === groupKey).sort((a, b) => a.weight - b.weight);
+            for (let spool of spools) {
+                if (remaining <= 0) break;
+                if (spool.weight >= remaining) { spool.weight -= remaining; remaining = 0; }
+                else { remaining -= spool.weight; spool.weight = 0; }
+            }
+            state.filaments = state.filaments.filter(f => f.weight > 0);
+            return remaining;
+        }
+
+        function populateFilamentDropdown(targetId = 'sched-filament') {
+            const sel = document.getElementById(targetId);
+            sel.innerHTML = '';
+            const groups = getGroupedFilaments();
+            for (const key in groups) {
+                const g = groups[key];
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = `${g.brand} (${g.color}) - ${ownerLabel(g.owner)} ${T('[{0} restantes]', g.weight)}`;
+                sel.appendChild(opt);
+            }
+        }
+
+        function renderStock() {
+            const hBody = document.getElementById('stock-house-body'); const tBody = document.getElementById('stock-team-body');
+            hBody.innerHTML = ''; tBody.innerHTML = '';
+
+            Object.values(getGroupedFilaments()).forEach(g => {
+                const pct = (g.weight / g.max) * 100;
+                const barColor = pct > 40 ? 'bg-green-500' : (pct > 20 ? 'bg-yellow-500' : 'bg-red-500');
+                const row = `
+                    <tr>
+                        <td class="px-4 py-3 font-medium dark:text-gray-200">${esc(g.brand)}</td>
+                        ${g.owner !== 'House' ? `<td class="px-4 py-3"><span class="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded text-xs">${esc(g.owner)}</span></td>` : ''}
+                        <td class="px-4 py-3 flex items-center gap-2 dark:text-gray-300"><span class="w-3 h-3 rounded-full ${g.colorCss} border dark:border-gray-600 shadow-sm"></span> ${esc(g.color)}</td>
+                        <td class="px-4 py-3 text-gray-700 dark:text-gray-300 font-medium">${g.rolls} <span class="text-xs text-gray-400 dark:text-gray-500 font-normal">${T('unidade(s)')}</span></td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2"><div class="${barColor} h-2 rounded-full" style="width: ${pct}%"></div></div>
+                                <span class="text-xs ${pct <= 20 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-600 dark:text-gray-400'}">${g.weight}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-right"><button onclick="promptUsage('${esc(g.key)}')" class="text-blue-600 dark:text-blue-400 hover:underline text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">${T('Registrar uso')}</button></td>
+                    </tr>`;
+                if (g.owner === 'House') hBody.innerHTML += row; else tBody.innerHTML += row;
+            });
+            document.getElementById('stat-spools').innerText = state.filaments.length;
+        }
+
+        function promptUsage(groupKey) {
+            document.getElementById('usage-group-key').value = groupKey; document.getElementById('usage-grams').value = ''; openModal('modal-log-usage');
+        }
+
+        function saveUsage() {
+            const sub = parseInt(document.getElementById('usage-grams').value); if (!sub) return;
+            deductFilamentFromGroup(document.getElementById('usage-group-key').value, sub);
+            closeModal('modal-log-usage'); renderAll();
+        }
+
+        function saveSpool() {
+            const type = document.getElementById('spool-type').value;
+            const brandStr = document.getElementById('spool-brand').value || 'Sem marca';
+            const colorData = document.getElementById('spool-color').value.split('|');
+            let owner = (document.getElementById('spool-owner').value || '').trim();
+            if (!owner || /^(house|casa|slim3d|casa \(slim3d\))$/i.test(owner)) owner = 'House';
+            const w = parseInt(document.getElementById('spool-weight').value);
+
+            state.filaments.push({
+                id: 'f' + Date.now(),
+                brand: brandStr + ' ' + type,
+                color: colorData[0], colorCss: colorData[1],
+                owner, weight: w, max: w
+            });
+            closeModal('modal-add-spool'); renderAll();
+        }
+
+
+        // ===== Empresas / equipes: unificar nomes escritos de jeitos diferentes =====
+        // teamAliases: { "fab lab joinvile": "Fab Lab Joinville" }  (chave = nome enviado normalizado)
+        const normTeam = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        function teamOf(p) {
+            if (!p) return '';
+            if (p.teamOverride) return p.teamOverride;
+            const a = (state.teamAliases || {})[normTeam(p.team)];
+            return a || p.team || '';
+        }
+        function lev(a, b) {
+            const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+            let prev = Array.from({ length: n + 1 }, (_, j) => j);
+            for (let i = 1; i <= m; i++) {
+                const cur = [i];
+                for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+                prev = cur;
+            }
+            return prev[n];
+        }
+        // 0 a 1: quanto dois nomes de empresa se parecem
+        function teamSimilarity(x, y) {
+            const a = normTeam(x), b = normTeam(y);
+            if (!a || !b) return 0;
+            if (a === b) return 1;
+            const a2 = a.replace(/ /g, ''), b2 = b.replace(/ /g, '');
+            if (a2 === b2) return 0.98;
+            if (a2.includes(b2) || b2.includes(a2)) return 0.85;
+            const ed = 1 - lev(a2, b2) / Math.max(a2.length, b2.length);
+            const ta = new Set(a.split(' ')), tb = new Set(b.split(' '));
+            let common = 0; ta.forEach(t => { if ([...tb].some(u => u === t || (t.length > 3 && u.length > 3 && 1 - lev(t, u) / Math.max(t.length, u.length) >= 0.75))) common++; });
+            const tok = common / Math.max(ta.size, tb.size);
+            return Math.max(ed, tok * 0.9);
+        }
+        function allTeams() {
+            const set = new Map();
+            state.projects.forEach(p => {
+                [teamOf(p), p.team].forEach(t => { if (t && !set.has(normTeam(t))) set.set(normTeam(t), t); });
+            });
+            Object.values(state.teamAliases || {}).forEach(t => { if (t && !set.has(normTeam(t))) set.set(normTeam(t), t); });
+            return [...set.values()].sort((a, b) => a.localeCompare(b, 'pt'));
+        }
+        function teamChip(name, extra) {
+            const n = state.projects.filter(p => normTeam(teamOf(p)) === normTeam(name) || normTeam(p.team) === normTeam(name)).length;
+            return `<button type="button" data-team="${esc(name)}" class="team-chip text-xs border border-gray-300 dark:border-gray-600 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2.5 py-1 rounded-full">${esc(name)} <span class="text-gray-400">· ${n}${extra || ''}</span></button>`;
+        }
+        function openTeamModal(id) {
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            const $ = i => document.getElementById(i);
+            $('team-project-id').value = id;
+            $('team-orig').innerText = p.team || '—';
+            $('team-input').value = teamOf(p);
+            const teams = allTeams();
+            $('team-datalist').innerHTML = teams.map(t => `<option value="${esc(t)}">`).join('');
+            const base = p.team || teamOf(p);
+            const sim = teams.map(t => [t, teamSimilarity(base, t)])
+                .filter(([t, sc]) => sc >= 0.55 && normTeam(t) !== normTeam(base))
+                .sort((a, b) => b[1] - a[1]).slice(0, 12);
+            $('team-similar').innerHTML = sim.length ? sim.map(([t, sc]) => teamChip(t, ` · ${Math.round(sc * 100)}%`)).join('')
+                : `<span class="text-gray-500 dark:text-gray-400">${T('Nenhum nome parecido encontrado.')}</span>`;
+            $('team-all').innerHTML = teams.map(t => teamChip(t)).join('');
+            document.querySelectorAll('#modal-team .team-chip').forEach(b => b.onclick = () => { $('team-input').value = b.dataset.team; $('team-input').focus(); });
+            const same = state.projects.filter(x => normTeam(x.team) === normTeam(p.team)).length;
+            $('team-all-label').innerText = T('Aplicar a todos os pedidos enviados como "{0}" ({1}), inclusive os próximos', p.team || '—', same);
+            const alias = (state.teamAliases || {})[normTeam(p.team)];
+            $('team-alias-info').innerText = alias ? T('Hoje "{0}" já está unificado como "{1}".', p.team, alias) : '';
+            $('team-reset').onclick = () => resetTeam(id);
+            openModal('modal-team');
+            setTimeout(() => $('team-input').select(), 50);
+        }
+        function saveTeam() {
+            const id = document.getElementById('team-project-id').value;
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            let name = document.getElementById('team-input').value.trim();
+            if (!name) return alert(T('Escreva o nome da empresa.'));
+            // reaproveita a grafia de um nome já existente igual (ignorando maiúsculas e acentos)
+            const same = allTeams().find(t => normTeam(t) === normTeam(name)); if (same) name = same;
+            state.teamAliases = state.teamAliases || {};
+            if (document.getElementById('team-all-check').checked && p.team) {
+                if (normTeam(name) === normTeam(p.team)) delete state.teamAliases[normTeam(p.team)];
+                else state.teamAliases[normTeam(p.team)] = name;
+                state.projects.forEach(x => { if (normTeam(x.team) === normTeam(p.team)) x.teamOverride = null; });
+                // quem já apontava para o nome antigo passa a apontar para o novo
+                const old = teamOf(p);
+                Object.keys(state.teamAliases).forEach(k => { if (normTeam(state.teamAliases[k]) === normTeam(p.team)) state.teamAliases[k] = name; });
+            } else {
+                p.teamOverride = (normTeam(name) === normTeam(p.team)) ? null : name;
+            }
+            closeModal('modal-team');
+            renderAll();
+            if (document.getElementById('modal-job-details').classList.contains('active')) openJobDetails(id);
+        }
+        function resetTeam(id) {
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            p.teamOverride = null;
+            if (state.teamAliases) delete state.teamAliases[normTeam(p.team)];
+            closeModal('modal-team');
+            renderAll();
+            if (document.getElementById('modal-job-details').classList.contains('active')) openJobDetails(id);
+        }
+
+
+        // ===== Editar dados de um pedido (inclusive já pronto ou com falha) =====
+        // Devolve material ao estoque de um grupo (recria o rolo se ele já tinha acabado)
+        function refundToGroup(groupKey, amount) {
+            if (!groupKey || !amount) return;
+            const spools = state.filaments.filter(f => getFilamentGroupKey(f) === groupKey).sort((a, b) => (b.max - b.weight) - (a.max - a.weight));
+            if (spools.length) { spools[0].weight += amount; spools[0].max = Math.max(spools[0].max, spools[0].weight); return; }
+            const [brand, color, owner, colorCss] = groupKey.split('|');
+            state.filaments.push({ id: 'f' + Date.now(), brand, color, owner, colorCss, weight: amount, max: amount });
+        }
+        function openEditJob(id) {
+            const p = state.projects.find(x => x.id === id); if (!p) return;
+            const $ = i => document.getElementById(i);
+            const isFailed = p.status === 'failed' && p.failedLogs && p.failedLogs.length;
+            const log = isFailed ? p.failedLogs[p.failedLogs.length - 1] : null;
+            $('edit-id').value = id;
+            $('edit-failed-note').classList.toggle('hidden', !isFailed);
+            $('edit-name').value = p.name || '';
+            $('edit-email').value = p.email || '';
+            $('edit-submitter').value = p.submitter || '';
+            $('edit-phone').value = p.phone || '';
+            $('edit-own').value = p.ownMaterialOverride || '';
+            $('edit-printer').value = (log ? log.printer : p.printer) || '';
+            $('edit-date').value = p.date || '';
+            $('edit-time').value = p.time || '';
+            $('edit-duration').value = (log ? log.duration : p.duration) ?? '';
+            populateFilamentDropdown('edit-filament');
+            const sel = $('edit-filament'), grp = log ? log.group : p.filamentGroup;
+            sel.insertAdjacentHTML('afterbegin', `<option value="">—</option>`);
+            if (grp && ![...sel.options].some(o => o.value === grp)) {
+                const [b, c, o] = grp.split('|');
+                sel.insertAdjacentHTML('beforeend', `<option value="${esc(grp)}">${esc(b)} (${esc(c)}) - ${esc(ownerLabel(o))} ${T('[sem estoque]')}</option>`);
+            }
+            sel.value = grp || '';
+            $('edit-usage').value = (log ? log.usage : p.filamentUsage) ?? '';
+            const counted = isFailed || (p.status === 'done' && p.deducted);
+            $('edit-stock-note').innerText = counted
+                ? T('O material já foi descontado do estoque. Ao salvar, o painel devolve a quantidade antiga e desconta a nova automaticamente.')
+                : T('O material só é descontado do estoque quando o pedido vai para "Prontos".');
+            openModal('modal-edit-job');
+        }
+        function saveEditJob() {
+            const $ = i => document.getElementById(i);
+            const p = state.projects.find(x => x.id === $('edit-id').value); if (!p) return;
+            const name = $('edit-name').value.trim();
+            if (!name) return alert(T('O nome do projeto é obrigatório.'));
+            const printer = $('edit-printer').value || null;
+            const date = $('edit-date').value || null, time = $('edit-time').value || null;
+            const durRaw = $('edit-duration').value, useRaw = $('edit-usage').value;
+            const duration = durRaw === '' ? null : Math.max(0, parseFloat(durRaw));
+            const usage = useRaw === '' ? null : Math.max(0, parseInt(useRaw));
+            const group = $('edit-filament').value || null;
+            if ((usage && !group) || (group && !usage)) return alert(T('Escolha o material e a quantidade juntos.'));
+
+            const isFailed = p.status === 'failed' && p.failedLogs && p.failedLogs.length;
+            let msg = '';
+            if (isFailed) {
+                const log = p.failedLogs[p.failedLogs.length - 1];
+                if (log.group !== group || log.usage !== usage) {
+                    refundToGroup(log.group, log.usage || 0);
+                    const short = group && usage ? deductFilamentFromGroup(group, usage) : 0;
+                    if (short > 0) msg = T('Atenção: faltou registrar {0} g/ml no estoque.', short);
+                }
+                Object.assign(log, { printer, duration, usage, group });
+            } else if (p.status === 'done' && p.deducted) {
+                if (p.filamentGroup !== group || p.filamentUsage !== usage) {
+                    refundToGroup(p.filamentGroup, p.filamentUsage || 0);
+                    const short = group && usage ? deductFilamentFromGroup(group, usage) : 0;
+                    if (short > 0) msg = T('Atenção: faltou registrar {0} g/ml no estoque.', short);
+                }
+            } else if (p.status === 'done' && !p.deducted && group && usage) {
+                // pedido pronto que ainda não tinha material lançado: desconta agora
+                const short = deductFilamentFromGroup(group, usage);
+                p.deducted = true;
+                if (short > 0) msg = T('Atenção: faltou registrar {0} g/ml no estoque.', short);
+            }
+            Object.assign(p, {
+                name, email: $('edit-email').value.trim(),
+                submitter: $('edit-submitter').value.trim(), phone: $('edit-phone').value.trim(),
+                ownMaterialOverride: $('edit-own').value || null,
+                printer, date, time, duration, filamentGroup: group, filamentUsage: usage
+            });
+            p.editedAt = nowBR();
+            closeModal('modal-edit-job');
+            renderAll();
+            if ($('modal-job-details').classList.contains('active')) openJobDetails(p.id);
+            if (msg) alert(msg);
+        }
+
+        // Abre a janela "Registrar impressão com falha" para o pedido
+        function openFailed(proj) {
+            document.getElementById('failed-project-id').value = proj.id;
+            populateFilamentDropdown('failed-filament');
+            if (proj.filamentGroup) document.getElementById('failed-filament').value = proj.filamentGroup;
+            document.getElementById('failed-printer').value = proj.printer || 'Hi Combo';
+            document.getElementById('failed-duration').value = proj.duration || 1;
+            document.getElementById('failed-usage').value = proj.filamentUsage || 20;
+            openModal('modal-failed');
+        }
+
+        async function handleDrop(e, targetStatus, colEl) {
+            e.preventDefault(); colEl.classList.remove('drag-over');
+            if (!state.draggedId) return;
+
+            const proj = state.projects.find(p => p.id === state.draggedId);
+            state.draggedId = null;
+            if (!proj) return;
+
+            if (targetStatus === 'scheduled') {
+                document.getElementById('sched-project-id').value = proj.id;
+                document.getElementById('sched-date').value = formatYMD(new Date());
+                populateFilamentDropdown('sched-filament');
+                openModal('modal-schedule');
+                return;
+            }
+
+            if (targetStatus === 'failed' && proj.status !== 'failed') {
+                openFailed(proj);
+                return;
+            }
+
+            if (targetStatus === 'done' && proj.status !== 'done') {
+                await markDone(proj);
+                return;
+            }
+
+            if (targetStatus !== 'failed' && targetStatus !== 'scheduled') proj.status = targetStatus;
+            renderAll();
+        }
+
+        function saveSchedule() {
+            const id = document.getElementById('sched-project-id').value;
+            const printer = document.getElementById('sched-printer').value;
+            const dateStr = document.getElementById('sched-date').value;
+            const startTimeStr = document.getElementById('sched-time').value;
+            const duration = parseFloat(document.getElementById('sched-duration').value);
+            const filGroup = document.getElementById('sched-filament').value;
+            const filUsage = parseInt(document.getElementById('sched-usage').value);
+
+            if (!dateStr || !startTimeStr || !duration || !filUsage) return alert(T('Preencha todos os campos.'));
+
+            const [sh, sm] = startTimeStr.split(':').map(Number);
+            const startMins = sh * 60 + sm; const endMins = startMins + (duration * 60);
+            const conflict = state.projects.some(p => {
+                if (p.id === id) return false;
+                if (p.status === 'scheduled' && p.printer === printer && p.date === dateStr && p.time) {
+                    const [psh, psm] = p.time.split(':').map(Number);
+                    const pStart = psh * 60 + psm; const pEnd = pStart + (p.duration * 60);
+                    return (startMins < pEnd && endMins > pStart);
+                }
+                return false;
+            });
+            if (conflict) return alert(T('CONFLITO: a {0} já está ocupada nesse horário.', printer));
+
+            const proj = state.projects.find(p => p.id === id);
+            if (proj.status === 'failed') proj.deducted = false;
+
+            proj.printer = printer; proj.date = dateStr; proj.time = startTimeStr;
+            proj.duration = duration; proj.filamentGroup = filGroup; proj.filamentUsage = filUsage;
+            proj.status = 'scheduled';
+
+            closeModal('modal-schedule'); renderAll();
+        }
+        function cancelSchedule() { closeModal('modal-schedule'); state.draggedId = null; }
+
+        function saveFailed() {
+            const id = document.getElementById('failed-project-id').value;
+            const printer = document.getElementById('failed-printer').value;
+            const duration = parseFloat(document.getElementById('failed-duration').value);
+            const filGroup = document.getElementById('failed-filament').value;
+            const filUsage = parseInt(document.getElementById('failed-usage').value);
+
+            if (!duration || !filUsage) return alert(T('Preencha todos os campos.'));
+
+            const proj = state.projects.find(p => p.id === id);
+
+            if (filGroup && filUsage) {
+                const shortage = deductFilamentFromGroup(filGroup, filUsage);
+                if (shortage > 0) alert(T('Atenção: faltou registrar {0} g/ml no estoque.', shortage));
+            }
+
+            proj.failedLogs = proj.failedLogs || [];
+            proj.failedLogs.push({ printer, duration, usage: filUsage, group: filGroup, date: formatYMD(new Date()) });
+
+            proj.printer = printer;
+            proj.duration = duration;
+            proj.filamentGroup = filGroup;
+            proj.filamentUsage = filUsage;
+            proj.status = 'failed';
+            proj.deducted = true;
+
+            closeModal('modal-failed');
+            renderAll();
+        }
+
+        function getUserCategory(teamName) {
+            if (!teamName) return 'Teams';
+            const t = teamName.toLowerCase();
+            if (t.includes('admin') || t.includes('internal') || t.includes('interno') || t.includes('house') || t.includes('slim3d')) return 'Internal';
+            if (t.includes('fablab') || t.includes('fab lab')) return 'Affiliated Fablab';
+            if (t.includes('partner') || t.includes('parceiro') || t.includes('creality')) return 'Partners';
+            return 'Teams';
+        }
+
+        // ===== Filtro de período dos analíticos (datas em AAAA-MM-DD) =====
+        let anStart = '', anEnd = '';
+        try { const r = JSON.parse(localStorage.getItem('slim3d_an_range') || '{}'); anStart = r.start || ''; anEnd = r.end || ''; } catch (e) {}
+
+        // Sem filtro: conta tudo. Com filtro: só o que tem data dentro do intervalo.
+        function inRange(d) {
+            if (!anStart && !anEnd) return true;
+            if (!d) return false;
+            if (anStart && d < anStart) return false;
+            if (anEnd && d > anEnd) return false;
+            return true;
+        }
+
+        function applyRange(start, end) {
+            if (start && end && start > end) [start, end] = [end, start];
+            anStart = start || ''; anEnd = end || '';
+            document.getElementById('an-start').value = anStart;
+            document.getElementById('an-end').value = anEnd;
+            try { localStorage.setItem('slim3d_an_range', JSON.stringify({ start: anStart, end: anEnd })); } catch (e) {}
+            renderAnalytics();
+        }
+
+        function setRange(kind) {
+            const t = new Date(); t.setHours(0, 0, 0, 0);
+            const back = n => { const d = new Date(t); d.setDate(d.getDate() - n); return formatYMD(d); };
+            if (kind === '7d') applyRange(back(6), formatYMD(t));
+            else if (kind === '30d') applyRange(back(29), formatYMD(t));
+            else if (kind === 'mes') applyRange(formatYMD(new Date(t.getFullYear(), t.getMonth(), 1)), formatYMD(new Date(t.getFullYear(), t.getMonth() + 1, 0)));
+            else if (kind === 'mesant') applyRange(formatYMD(new Date(t.getFullYear(), t.getMonth() - 1, 1)), formatYMD(new Date(t.getFullYear(), t.getMonth(), 0)));
+            else if (kind === 'ano') applyRange(`${t.getFullYear()}-01-01`, `${t.getFullYear()}-12-31`);
+            else applyRange('', '');
+        }
+
+        function renderAnalytics() {
+            const isDark = document.documentElement.classList.contains('dark');
+            Chart.defaults.color = isDark ? '#9ca3af' : '#64748b';
+            const gridColor = isDark ? '#374151' : '#e5e7eb';
+
+            let totalMachineHours = 0;
+            let totalPrintJobs = 0;
+            let failedCount = 0;
+
+            const teamHours = {}, printerHours = {}, teamPrints = {}, teamMaterial = {}, teamHouseMaterial = {};
+            const userCategories = { 'Internal': 0, 'Teams': 0, 'Affiliated Fablab': 0, 'Partners': 0 };
+            const houseMat = {}, teamMat = {};
+
+            state.projects.forEach(p => {
+                if ((p.status === 'scheduled' || p.status === 'done') && inRange(p.status === 'done' ? (p.date || p.doneAt) : p.date)) {
+                    totalPrintJobs++;
+                    const dur = p.duration || 0;
+                    totalMachineHours += dur;
+                    if (dur) teamHours[teamOf(p)] = (teamHours[teamOf(p)] || 0) + dur;
+                    if (dur && p.printer) printerHours[p.printer] = (printerHours[p.printer] || 0) + dur;
+
+                    teamPrints[teamOf(p)] = (teamPrints[teamOf(p)] || 0) + 1;
+                    userCategories[getUserCategory(teamOf(p))]++;
+
+                    if (p.filamentGroup && p.filamentUsage) {
+                        const matName = p.filamentGroup.split('|')[0];
+                        const owner = p.filamentGroup.split('|')[2];
+                        if (owner === 'House') {
+                            houseMat[matName] = (houseMat[matName] || 0) + p.filamentUsage;
+                            teamHouseMaterial[teamOf(p)] = (teamHouseMaterial[teamOf(p)] || 0) + p.filamentUsage;
+                        } else {
+                            teamMat[matName] = (teamMat[matName] || 0) + p.filamentUsage;
+                        }
+                        teamMaterial[teamOf(p)] = (teamMaterial[teamOf(p)] || 0) + p.filamentUsage;
+                    }
+                }
+
+                if (p.failedLogs) {
+                    p.failedLogs.forEach(log => {
+                        if (!inRange(log.date || p.date)) return;
+                        failedCount++;
+                        totalMachineHours += log.duration;
+                        teamHours[teamOf(p)] = (teamHours[teamOf(p)] || 0) + log.duration;
+                        if (log.printer) printerHours[log.printer] = (printerHours[log.printer] || 0) + log.duration;
+
+                        if (log.group && log.usage) {
+                            const matName = log.group.split('|')[0];
+                            const owner = log.group.split('|')[2];
+                            if (owner === 'House') {
+                                houseMat[matName] = (houseMat[matName] || 0) + log.usage;
+                                teamHouseMaterial[teamOf(p)] = (teamHouseMaterial[teamOf(p)] || 0) + log.usage;
+                            } else {
+                                teamMat[matName] = (teamMat[matName] || 0) + log.usage;
+                            }
+                            teamMaterial[teamOf(p)] = (teamMaterial[teamOf(p)] || 0) + log.usage;
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('stat-hours').innerText = (Math.round(totalMachineHours * 10) / 10) + ' h';
+            document.getElementById('stat-projects').innerText = totalPrintJobs;
+
+            const periodo = periodLabel();
+            document.getElementById('an-label').innerHTML =
+                `<strong>${periodo}</strong> · ${T('{0} impressão(ões) · {1} falha(s) · {2} h de máquina', totalPrintJobs, failedCount, Math.round(totalMachineHours * 10) / 10)}` +
+                ((anStart || anEnd) ? ` <span class="text-xs text-gray-400">${T('(pela data agendada da impressão; o CSV também segue este período)')}</span>` : '');
+
+            const drawChart = (id, type, dataObj, label, bgColors) => {
+                const ctx = document.getElementById(id).getContext('2d');
+                if (charts[id]) charts[id].destroy();
+
+                const labels = Object.keys(dataObj).length ? Object.keys(dataObj) : [T('Sem dados')];
+                const data = Object.keys(dataObj).length ? Object.values(dataObj) : [0];
+
+                const options = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: type !== 'bar', position: 'right' } }
+                };
+                if (type === 'bar') {
+                    options.scales = {
+                        y: { beginAtZero: true, grid: { color: gridColor } },
+                        x: { grid: { color: gridColor } }
+                    };
+                }
+
+                charts[id] = new Chart(ctx, {
+                    type,
+                    data: {
+                        labels,
+                        datasets: [{
+                            label,
+                            data,
+                            backgroundColor: bgColors || (isDark ? '#60a5fa' : '#3b82f6'),
+                            borderRadius: type === 'bar' ? 4 : 0,
+                            borderColor: isDark && type !== 'bar' ? '#1f2937' : '#ffffff',
+                            borderWidth: type !== 'bar' ? 2 : 0
+                        }]
+                    },
+                    options
+                });
+            };
+
+            const colorsPie = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'];
+
+            drawChart('chart-hours-team', 'bar', teamHours, T('Horas de impressão'));
+            drawChart('chart-hours-printer', 'bar', printerHours, T('Horas por impressora'), isDark ? '#34d399' : '#10b981');
+            drawChart('chart-material-team', 'bar', teamMaterial, T('Material usado (g/ml)'), isDark ? '#f472b6' : '#ec4899');
+            drawChart('chart-house-material-team', 'bar', teamHouseMaterial, T('Material da casa (g/ml)'), isDark ? '#f87171' : '#ef4444');
+            drawChart('chart-prints-team', 'doughnut', teamPrints, T('Impressões'), colorsPie);
+
+            const activeCats = {};
+            for (let key in userCategories) if (userCategories[key] > 0) activeCats[T(CAT_PT[key])] = userCategories[key];
+            drawChart('chart-uses-category', 'pie', activeCats, T('Categoria'), ['#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6']);
+
+            drawChart('chart-house-mat', 'bar', houseMat, T('Uso (g/ml)'), isDark ? '#fbbf24' : '#f59e0b');
+            drawChart('chart-team-mat', 'bar', teamMat, T('Uso (g/ml)'), isDark ? '#a78bfa' : '#8b5cf6');
+        }
+
+
+        // ===== Relatório: trabalhos concluídos (Excel / Google Planilhas) =====
+        function periodLabel() {
+            return (!anStart && !anEnd) ? T('Todo o período')
+                : (anStart && anEnd) ? T('De {0} a {1}', fmtBR(anStart), fmtBR(anEnd))
+                : anStart ? T('A partir de {0}', fmtBR(anStart)) : T('Até {0}', fmtBR(anEnd));
+        }
+        const REPORT_COLS = ['Nome do Projeto', 'Nome de quem enviou', 'Telefone', 'E-mail', 'Tempo de impressão (h)', 'Quantidade de material (g/ml)', 'Material', 'Máquina', 'Material próprio'];
+        // true = material próprio, false = material da casa, null = sem informação
+        function ownMaterialOf(p) {
+            if (p.ownMaterialOverride === 'sim') return true;
+            if (p.ownMaterialOverride === 'nao') return false;
+            if (p.filamentGroup) return p.filamentGroup.split('|')[2] !== 'House';   // pelo estoque realmente usado
+            const f = normTeam(p.ownFilament);                                       // pela resposta do formulário
+            if (f) return !/^(nao|no)\b/.test(f);
+            return null;
+        }
+        function materialOf(p) {
+            if (p.filamentGroup) {
+                const [brand, color] = p.filamentGroup.split('|');
+                return color ? `${brand} (${color})` : brand;
+            }
+            return p.material ? String(p.material) : '';
+        }
+        const doneDateOf = p => p.date || p.doneAt || null;
+        const cellText = v => (v === null || v === undefined) ? '' : String(v).trim();
+        const cellNum = v => (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? null : Number(v);
+        function reportJobs() {
+            const pr = document.getElementById('report-printer').value;
+            return state.projects
+                .filter(p => p.status === 'done' && inRange(doneDateOf(p)) && (pr === 'ALL' || p.printer === pr))
+                .sort((a, b) => `${doneDateOf(a) || '9999-99-99'}T${a.time || ''}`.localeCompare(`${doneDateOf(b) || '9999-99-99'}T${b.time || ''}`));
+        }
+        function reportRows(jobs) {
+            return jobs.map(p => {
+                const own = ownMaterialOf(p);
+                return [
+                    cellText(p.name), cellText(p.submitter), cellText(p.phone), cellText(p.email),
+                    cellNum(p.duration), cellNum(p.filamentUsage),
+                    materialOf(p), cellText(p.printer),
+                    own === null ? '' : (own ? T('Sim') : T('Não'))
+                ].map(v => v === '' ? null : v);
+            });
+        }
+        function openReport() {
+            document.getElementById('report-gs-help').classList.add('hidden');
+            loadXLSX().catch(() => {});   // já vai carregando a biblioteca da planilha
+            refreshReport();
+            openModal('modal-report');
+        }
+        function refreshReport() {
+            const $ = i => document.getElementById(i);
+            const jobs = reportJobs();
+            $('report-period').innerText = T('Período: {0}', periodLabel());
+            $('report-cols').innerText = T('Colunas: {0}', REPORT_COLS.map(c => T(c)).join(' · '));
+            $('report-count').innerText = T('{0} trabalho(s) concluído(s) serão exportados.', jobs.length);
+            $('report-btn-excel').disabled = $('report-btn-google').disabled = jobs.length === 0;
+
+            const warn = [];
+            const add = (n, msg) => { if (n) warn.push(T(msg, n)); };
+            add(jobs.filter(p => !cellText(p.submitter)).length, '{0} sem nome de quem enviou');
+            add(jobs.filter(p => !cellText(p.phone)).length, '{0} sem telefone');
+            add(jobs.filter(p => !cellText(p.email)).length, '{0} sem e-mail');
+            add(jobs.filter(p => cellNum(p.duration) === null).length, '{0} sem tempo de impressão');
+            add(jobs.filter(p => cellNum(p.filamentUsage) === null).length, '{0} sem quantidade de material');
+            add(jobs.filter(p => !materialOf(p)).length, '{0} sem material');
+            add(jobs.filter(p => !cellText(p.printer)).length, '{0} sem máquina');
+            add(jobs.filter(p => ownMaterialOf(p) === null).length, '{0} sem informação de material próprio');
+            if (anStart || anEnd) {
+                const pr = $('report-printer').value;
+                add(state.projects.filter(p => p.status === 'done' && !doneDateOf(p) && (pr === 'ALL' || p.printer === pr)).length,
+                    '{0} trabalho(s) concluído(s) sem data ficaram fora do período (escolha "Todo o período" para incluir)');
+            }
+            const box = $('report-warnings');
+            box.classList.toggle('hidden', !warn.length);
+            box.innerHTML = warn.length
+                ? warn.map(w => `<div>• ${esc(w)}</div>`).join('') + `<div class="pt-1 font-medium">${esc(T('Esses campos saem em branco. Complete pelo botão ✎ Editar dados do pedido, se quiser.'))}</div>`
+                : '';
+        }
+
+        // Biblioteca SheetJS (gera o .xlsx no navegador); carrega só quando precisa, com servidor reserva
+        let xlsxPromise = null;
+        function loadXLSX() {
+            if (window.XLSX) return Promise.resolve(window.XLSX);
+            if (xlsxPromise) return xlsxPromise;
+            const urls = [
+                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+            ];
+            const tryUrl = url => new Promise((resolve, reject) => {
+                const sc = document.createElement('script');
+                sc.src = url; sc.async = true;
+                sc.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('XLSX'));
+                sc.onerror = () => { sc.remove(); reject(new Error('XLSX')); };
+                document.head.appendChild(sc);
+            });
+            xlsxPromise = urls.reduce((prev, url) => prev.catch(() => tryUrl(url)), Promise.reject(new Error('start')))
+                .catch(err => { xlsxPromise = null; throw err; });
+            return xlsxPromise;
+        }
+
+        function buildReportWorkbook(X) {
+            const jobs = reportJobs();
+            const header = REPORT_COLS.map(c => T(c));
+            const rows = reportRows(jobs);
+            const ws = X.utils.aoa_to_sheet([header, ...rows]);
+            // Telefone sempre como texto (não vira número nem perde zeros)
+            for (let r = 1; r <= rows.length; r++) {
+                const ref = X.utils.encode_cell({ r, c: 2 });
+                if (ws[ref]) { ws[ref].t = 's'; ws[ref].v = String(ws[ref].v); delete ws[ref].w; }
+            }
+            ws['!cols'] = [{ wch: 30 }, { wch: 28 }, { wch: 18 }, { wch: 32 }, { wch: 22 }, { wch: 28 }, { wch: 28 }, { wch: 14 }, { wch: 16 }];
+            ws['!autofilter'] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: header.length - 1 } }) };
+            const wb = X.utils.book_new();
+            X.utils.book_append_sheet(wb, ws, T('Trabalhos concluídos'));
+            const pr = document.getElementById('report-printer').value;
+            const parts = [T('Trabalhos_concluidos')];
+            if (anStart || anEnd) parts.push(`${anStart || T('inicio')}_${anEnd || formatYMD(new Date())}`);
+            else parts.push(formatYMD(new Date()));
+            if (pr !== 'ALL') parts.push(pr.replace(/\s+/g, '_'));
+            return { wb, filename: parts.join('_') + '.xlsx', count: rows.length };
+        }
+
+        async function exportReport(kind) {
+            if (!reportJobs().length) return alert(T('Nenhum trabalho concluído para exportar com esses filtros.'));
+            // abre o Google Planilhas já no clique (senão o navegador bloqueia a nova aba)
+            if (kind === 'google') window.open('https://docs.google.com/spreadsheets/u/0/', '_blank', 'noopener');
+            const btn = document.getElementById(kind === 'google' ? 'report-btn-google' : 'report-btn-excel');
+            const label = btn.innerText;
+            btn.disabled = true; btn.innerText = T('Gerando…');
+            try {
+                const X = await loadXLSX();
+                const { wb, filename } = buildReportWorkbook(X);
+                X.writeFile(wb, filename, { compression: true });
+                if (kind === 'google') {
+                    const help = document.getElementById('report-gs-help');
+                    help.innerText = T('O arquivo "{0}" foi baixado e o Google Planilhas abriu em outra aba. Lá, clique no ícone de pasta (Abrir seletor de arquivos) → Fazer upload e escolha esse arquivo. Ele abre como planilha do Google.', filename);
+                    help.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error('Erro ao gerar a planilha:', err);
+                alert(T('Não foi possível gerar a planilha. Verifique a conexão com a internet e tente de novo.'));
+            } finally {
+                btn.innerText = label; btn.disabled = false;
+            }
+        }
+
+        function downloadCSV() {
+            const selectedPrinter = document.getElementById('export-printer').value;
+            const rows = [['Data', 'Hora', 'Status', 'Impressora', 'Projeto', 'Equipe/Pessoa', 'E-mail', 'Duração (h)', 'Material', 'Quantidade (g/ml)', 'E-mail de pronto enviado'].map(h => T(h))];
+            const escapeCSV = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+
+            state.projects.forEach(p => {
+                if (p.failedLogs && p.failedLogs.length > 0) {
+                    p.failedLogs.forEach((log, index) => {
+                        if ((selectedPrinter === 'ALL' || log.printer === selectedPrinter) && inRange(log.date || p.date)) {
+                            const matName = log.group ? log.group.split('|')[0] : '—';
+                            rows.push([
+                                escapeCSV(fmtBR(log.date || p.date)), escapeCSV(p.time), escapeCSV(T('FALHOU')), escapeCSV(log.printer),
+                                escapeCSV(`${p.name} ${T('(falha #{0})', index + 1)}`), escapeCSV(teamOf(p)), escapeCSV(p.email),
+                                escapeCSV(log.duration), escapeCSV(matName), escapeCSV(log.usage), escapeCSV('')
+                            ]);
+                        }
+                    });
+                }
+
+                if ((p.status === 'done' || p.status === 'scheduled') && p.printer) {
+                    if ((selectedPrinter === 'ALL' || p.printer === selectedPrinter) && inRange(p.status === 'done' ? (p.date || p.doneAt) : p.date)) {
+                        const matName = p.filamentGroup ? p.filamentGroup.split('|')[0] : '—';
+                        rows.push([
+                            escapeCSV(fmtBR(p.date)), escapeCSV(p.time), escapeCSV(T(STATUS_PT[p.status] || p.status).toUpperCase()), escapeCSV(p.printer),
+                            escapeCSV(p.name), escapeCSV(teamOf(p)), escapeCSV(p.email),
+                            escapeCSV(p.duration), escapeCSV(matName), escapeCSV(p.filamentUsage), escapeCSV(p.emailSentAt || '')
+                        ]);
+                    }
+                }
+            });
+
+            if (rows.length === 1) {
+                alert(T('Nenhum registro de impressão para esta máquina no período escolhido.'));
+                return;
+            }
+
+            const csvContent = "\uFEFF" + rows.map(r => r.join(";")).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `${T('Registros')}_${selectedPrinter === 'ALL' ? T('Todas') : selectedPrinter.replace(/\s+/g, '_')}_${formatYMD(new Date())}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            closeModal('modal-export');
+        }
+
+        function renderAll() {
+            renderKanban();
+            renderCalendar();
+            renderStock();
+            renderAnalytics();
+            updatePrinterStatus();
+            saveLocalState();
+        }
+
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        init();
+    </script>
+</body>
+</html>
